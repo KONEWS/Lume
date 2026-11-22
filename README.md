@@ -2,15 +2,21 @@
 
 澄音的动态歌词画面改编自 chthollyphile 的 [Folia](https://github.com/chthollyphile/folia-major)，经 [KONEWS/folia-Lyrics](https://github.com/KONEWS/folia-Lyrics) 接入播放器。播放时的歌词来自用户导入的音频标签、配套歌词文件，或播放空间中分享该曲目的设备。歌词动效、字体、字形数据、界面和音频组件的作者及许可证见[歌词与第三方来源](THIRD_PARTY_NOTICES.md)。
 
-局域网音乐播放器 0.5.5。Windows、安卓与鸿蒙均可创建、加入和管理播放空间。电脑和 Web 可从电脑或在线手机曲库点歌，Android 与 HarmonyOS 原生播放器可以独立导入和播放手机音乐，也可以自动发现电脑并一起播放左右声道。
+Folia 歌词的渲染、动效和样式设置以上游 Folia 为准；澄音只维护接入本机曲目、歌词和播放时钟所需的适配。引入新的上游改动时，先核对 [Folia 原仓库](https://github.com/chthollyphile/folia-major) 与 [folia-Lyrics 分支](https://github.com/KONEWS/folia-Lyrics)，保留原作者署名、许可证和可编辑源码，再分别验证桌面、Android 与 HarmonyOS。当前内置共用渲染器的来源提交及构建方式见 [folia/README.md](folia/README.md)；本段说明维护原则，不表示已同步上游最新提交。
+
+局域网音乐播放器 0.5.9。Windows、安卓与鸿蒙均可创建、加入和管理播放空间。电脑和 Web 可从电脑或在线手机曲库点歌，Android 与 HarmonyOS 原生播放器可以独立导入和播放手机音乐，也可以自动发现电脑并一起播放左右声道。
 
 Windows、网页与手机默认使用蓝夜配色。侧边栏底部的「外观」可切换本机配色。导航指示块平滑滑动，手机使用实时透镜折射，Windows 使用蓝夜亚克力。按住底部导航可以滑到其他页面，拖动播放进度并松手即可定位。内置三首原创合成试听音乐，不依赖互联网、账号或在线音乐服务。
 
 歌词样式预览沿用 Folia 的两首示例曲目，分别是 Ado 演唱的《踊》和月見ヤチヨ（CV 早見沙織）演唱的《星降る海》。词曲作者、预览数据出处和翻译署名情况见[预览曲目署名](THIRD_PARTY_NOTICES.md#样式预览中使用的两首歌)。
 
+## 安装包
+
+[GitHub 历史安装包归档](https://github.com/KONEWS/Lume/releases/tag/historical-installers-2026-11-22) 收录 `release/` 目录截至 2026-11-22 的 Windows `.exe`、Android `.apk` 和 HarmonyOS `.hap` 安装包。附件名中的 `root__` 代表 `release/` 根目录，其他附件以原相对目录开头；完整原路径、文件大小与 SHA-256 见该 Release 的 `MANIFEST.json`。归档包含各开发阶段的旧包，安装时请核对平台和版本。
+
 ## 开始使用
 
-运行 `release/Lume-0.5.5-Windows.exe`。首次启动需要解压运行资源。手机配对、安装和更换皮肤见[手机使用说明](docs/手机使用说明.md)。
+运行 `release/Lume-0.5.9-Windows.exe`。首次启动需要解压运行资源。手机配对、安装和更换皮肤见[手机使用说明](docs/手机使用说明.md)。
 
 1. 点击试听曲目播放，或用「导入音乐」选择本地音频。打开左上角菜单可按专辑、艺术家和文件夹浏览，或在「歌单」新建歌单。「扫描音乐」可查看扫描过的目录、屏蔽或解除屏蔽文件夹。屏蔽包含子目录。默认跳过短于 60 秒的音频，可在本页关闭。手动导入单曲仍可添加短音频。扫描时显示已处理首数。导入时可点「暂停导入」，当前文件或小批次结束后会等待「继续导入」。播放和暂停歌曲可以照常使用。「音乐库」可查看音频总大小、歌词覆盖率及音质分布。「统计」按曲目记录播放次数。
 2. 手机和电脑连接同一 Wi-Fi，打开手机澄音。在电脑「播放空间 → 连接设备」选择附近手机的型号，点「邀请加入」。手机点「申请加入」，再在电脑点「允许加入」。
@@ -90,3 +96,4 @@ npm run package:win
 - `resources/demo/`：内置原创试听音频。
 - `tests/`：服务整合测试。
 - `PLAYER_VISION.md`：完整产品愿景及后续多平台路线。
+
