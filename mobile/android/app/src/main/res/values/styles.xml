@@ -1,0 +1,13 @@
+<resources>
+    <style name="LumeTheme" parent="android:style/Theme.Material.NoActionBar">
+        <item name="android:windowBackground">#10121e</item>
+        <item name="android:windowSplashScreenBackground">#10121e</item>
+        <item name="android:statusBarColor">#10121e</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarDividerColor">@android:color/transparent</item>
+        <item name="android:windowDrawsSystemBarBackgrounds">true</item>
+        <item name="android:enforceNavigationBarContrast">false</item>
+    </style>
+</resources>

@@ -1,0 +1,19 @@
+/* The compositor uses viewport coordinates on both the desktop and phone layouts. */
+body.liquid-stage{isolation:isolate;background-color:#0c232c;background-image:var(--liquid-wallpaper);background-size:100% 100%;background-attachment:fixed}
+.lume-optics{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:-1}
+.liquid-stage [data-glass]{border:1px solid #d7fff14d;box-shadow:inset 0 1px 0 #ffffff4a,inset 0 -1px 0 #c1ede025,0 5px 18px -8px #03171988}
+.liquid-stage [data-elastic][data-jelly]{transform:var(--jelly-matrix);transform-origin:center;transition:color .16s}
+.liquid-stage.fallback [data-glass]{background:linear-gradient(135deg,#dffffd22,#102c385c 52%,#80c6c622);backdrop-filter:blur(7px) saturate(135%)}
+.liquid-stage.webgl-ready [data-glass]{background:linear-gradient(140deg,#f1ffff10,#09232910 56%,#baf4d909);backdrop-filter:none;-webkit-backdrop-filter:none}
+@media(prefers-reduced-motion:reduce){.liquid-stage [data-jelly]{transform:none}}
+[data-lens-group]{isolation:isolate}
+[data-lens-group]:not(.mobile-nav){position:relative}
+[data-lens-group] > button{position:relative;z-index:1;-webkit-tap-highlight-color:transparent}
+:is([data-lens-marker],[data-lens-position]){position:absolute;z-index:0;pointer-events:none;left:0;top:0;display:block;padding:0;border-radius:999px;transition:transform 420ms cubic-bezier(.22,.85,.25,1.10),width 340ms ease,height 340ms ease}
+.liquid-stage [data-lens-marker]{background:linear-gradient(135deg,#e5edff2b,#c6d5ff11);border:1px solid #dbe8ff78;box-shadow:inset 0 1px 0 #ffffff54,0 3px 8px #09122440}
+body[data-input-mode=pointer] :is(button,input,select):focus{outline:none}
+body[data-input-mode=keyboard] :is(button,input,select):focus-visible{outline:2px solid #bacfff;outline-offset:3px}
+@media(prefers-reduced-motion:reduce){:is([data-lens-marker],[data-lens-position]){transition:none}}
+[data-lens-group],.liquid-range,.seek-rail{touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
+[data-lens-group][data-sliding] :is([data-lens-marker],[data-lens-position]){transition:none}
+[data-lens-group][data-holding] [data-lens-marker]{border-color:#eef4ffb3;box-shadow:inset 0 1px 2px #ffffff85,0 3px 14px #05112c68}

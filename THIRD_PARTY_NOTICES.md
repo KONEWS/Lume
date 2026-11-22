@@ -6,6 +6,17 @@
 
 动态歌词画面、样式预览、着色器及桌面歌词设置源于 chthollyphile 的 Folia。澄音经 KONEWS 的 folia-Lyrics 分支适配，接入本机曲目、播放时钟、窗口控制和设置。移动端及共用渲染器的引入记录为 `683263bd0d062816a4e2b51c00d203ca52766f8a`，独立桌面歌词页基于 Folia Desktop Lyrics 0.5.7。两个目录保留可编辑源码和 GNU AGPL v3 许可全文。[Folia 原项目](https://github.com/chthollyphile/folia-major) · [桌面分支](https://github.com/KONEWS/folia-Lyrics) · [共用渲染器说明](folia/README.md) · [桌面适配记录](pc-lyrics/ATTRIBUTION.md) · [许可证](folia/LICENSE)
 
+### 样式预览中使用的两首歌
+
+Folia 的样式编辑器随附下列两首歌的歌词、译文和时间轴，用于预览歌词排版和动效。预览数据由 Folia 引入，其文件未注明译者或时间轴制作者。歌曲及歌词版权归各自权利人，Folia 的软件许可仅说明代码的使用条件。[预览数据目录](folia/src/components/visualizer/previewSongs/)
+
+| 歌曲 | 演唱 | 作词 | 作曲、编曲 | 署名出处 |
+| --- | --- | --- | --- | --- |
+| 踊 | Ado | DECO\*27 | Giga、TeddyLoid | [环球音乐日本](https://www.universal-music.co.jp/ado/news/2021-04-22/) |
+| 星降る海 | 月見ヤチヨ（CV 早見沙織） | Aqu3ra | Aqu3ra | [《超かぐや姫！》官网](https://www.news.cho-kaguyahime.com/593/) |
+
+### 歌词组件
+
 | 组件或素材 | 来源、用途与授权 |
 | --- | --- |
 | TTML | 桌面歌词工程使用 AMLL 的 `@applemusic-like-lyrics/ttml`，AGPL-3.0-only。[Apple Music-like Lyrics](https://github.com/amll-dev/applemusic-like-lyrics) |

@@ -1,0 +1,108 @@
+#full { animation: none }
+body:has(#full[data-morphing]) > :is(#library-frame,footer) { visibility: visible;pointer-events:none }
+.player-drag-backdrop {position:fixed;inset:0;z-index:2;pointer-events:none;background:var(--studio-wash,var(--page));will-change:opacity}
+.morph-material { position:fixed;inset:0;z-index:-1;pointer-events:none }
+.travelling-cover {
+  position:fixed;top:0;left:0;z-index:100;pointer-events:none;
+  background-position:center;background-size:cover;
+  transform-origin:center;will-change:transform;
+}
+.morph-material, #full[data-lyric-direction] {
+  background: var(--liquid-wallpaper, none) center / 100% 100%, var(--page);
+}
+:root:is([data-phone-theme=light],[data-custom-skin]) :is(.morph-material,#full[data-lyric-direction]) {
+  background: var(--page);
+}
+.return-cover {
+  position: absolute; top: 18%; left: 12%; width: min(76%,48vh); aspect-ratio: 1;
+  background-size: cover; background-position: center; border-radius: var(--lg-radius-panel);
+  pointer-events: none;
+}
+#full { touch-action: pan-y pinch-zoom }
+#mini { touch-action:none; user-select:none; -webkit-user-select:none }
+.listen-page #phone-dock { touch-action:none }
+#mini .mini-track:active { transform:none }
+.toggle { position:relative; isolation:isolate }
+.toggle svg { grid-area:1 / 1; pointer-events:none; transition:opacity .13s ease,transform .19s ease-out }
+.toggle[data-playing=true] svg:first-of-type,.toggle[data-playing=false] svg:last-of-type {
+  opacity:0;transform:scale(.7)
+}
+.play-halo { position:absolute; inset:12%; border-radius:50%; pointer-events:none; opacity:0;
+  background:radial-gradient(circle,currentColor,transparent 72%) }
+.toggle:active .play-halo { opacity:.4 }
+@media(prefers-reduced-motion:reduce) { .toggle svg { transition:none } }
+#full[data-lyric-direction] { view-transition-name: lyric-page }
+:root[data-lyric-direction] { view-transition-name: none; --lyric-side: 1 }
+:root[data-lyric-direction=back] { --lyric-side: -1 }
+::view-transition-old(lyric-page), ::view-transition-new(lyric-page) {
+  mix-blend-mode: normal; animation: 280ms cubic-bezier(.22,.72,.22,1) both;
+}
+::view-transition-old(lyric-page) { animation-name: lyric-leave }
+::view-transition-new(lyric-page) { animation-name: lyric-enter }
+@keyframes lyric-leave { to { transform: translateX(calc(-24% * var(--lyric-side))); opacity: 0 } }
+@keyframes lyric-enter { from { transform: translateX(calc(65% * var(--lyric-side))); opacity: 0 } }
+#lyrics-panel p { transition: color .2s, opacity .2s, filter .2s }
+#lyrics-panel:has([aria-current]) p:not([aria-current]) { opacity: .56; filter: blur(.55px) }
+
+.seek-times { display: inline-flex; gap: 7px; align-items: center }
+#seek-target { padding: 2px 6px; border-radius: 6px; color: var(--ink); background: var(--panel) }
+.seek-rail { transition: transform .16s ease }
+.seek:has(#seek-target:not([hidden])) .seek-rail { transform: scaleX(1.035) }
+.seek:has(#seek-target:not([hidden])) #elapsed { opacity: .65 }
+
+:is(dialog#room-invite,dialog.list-editor,dialog#queue-sheet) {
+  inset: auto 0 0; margin: 0 auto; width: min(100%, 560px); max-width: 100%;
+  max-height: 86dvh; overflow: auto; overscroll-behavior: contain;
+  padding: 10px 22px max(22px,var(--lume-safe-bottom));
+  border: 1px solid color-mix(in srgb,var(--ink) 16%,transparent);
+  border-radius: 26px 26px 0 0; background: var(--panel); color: var(--ink);
+  transform: translateY(100%);
+  transition: transform .25s cubic-bezier(.22,.72,.22,1), overlay .25s allow-discrete, display .25s allow-discrete;
+}
+:is(dialog#room-invite,dialog.list-editor,dialog#queue-sheet)[open] { transform: translateY(0) }
+:is(dialog#room-invite,dialog.list-editor,dialog#queue-sheet)::before {
+  content: ''; display: block; width: 36px; height: 4px; border-radius: 4px;
+  background: var(--muted); opacity: .52; margin: 0 auto 10px;
+}
+:is(#room-invite,.list-editor,#queue-sheet)::backdrop {
+  background: rgb(5 10 20 / 0%);
+  transition: background .25s, overlay .25s allow-discrete, display .25s allow-discrete;
+}
+:is(#room-invite,.list-editor,#queue-sheet)[open]::backdrop { background: rgb(5 10 20 / 48%) }
+@starting-style {
+  :is(dialog#room-invite,dialog.list-editor,dialog#queue-sheet)[open] { transform: translateY(100%) }
+  :is(#room-invite,.list-editor,#queue-sheet)[open]::backdrop { background: rgb(5 10 20 / 0%) }
+}
+dialog#queue-sheet { overflow: hidden }
+#queue-tracks { touch-action: pan-down pinch-zoom }
+#queue-sheet .queue-heading { touch-action: none }
+dialog#queue-sheet[data-pulling] {
+  transform: translateY(var(--queue-offset));
+  transition: none;
+}
+dialog#queue-sheet[data-pulling]::backdrop {
+  background: rgb(5 10 20 / var(--queue-shade, .48));
+  transition: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  #lyrics-panel p,.seek-rail,.seek-rail:has(input[data-tracking]) #seek-lens,
+  :is(dialog#room-invite,dialog.list-editor,dialog#queue-sheet),
+  :is(#room-invite,.list-editor,#queue-sheet)::backdrop { transition: none }
+  .seek:has(#seek-target:not([hidden])) .seek-rail { transform: none }
+}
+
+html[data-more-slide] { view-transition-name: none }
+html[data-more-slide] #full { view-transition-name: more-page }
+::view-transition-old(more-page), ::view-transition-new(more-page) {
+  mix-blend-mode: normal; animation: more-enter 360ms cubic-bezier(.2,.75,.25,1) both;
+}
+::view-transition-old(more-page) { animation-name: more-leave }
+html[data-more-slide=return] { --more-direction: -1 }
+@keyframes more-enter { from { transform: translateX(calc(100% * var(--more-direction,1))) } }
+@keyframes more-leave { to { transform: translateX(calc(-100% * var(--more-direction,1))) } }
+
+#full[data-morphing] { will-change:transform,opacity;backdrop-filter:none!important;pointer-events:none }
+#full[data-morphing] :is(.full-head,.full-playback) { backdrop-filter:none!important; }
+#full[data-dragging] {background:var(--studio-wash,var(--page));will-change:transform}
+:root[data-platform=HarmonyOS] #full[data-dragging] #album {will-change:transform}
+:root[data-platform=HarmonyOS] #full[data-dragging] :is(.full-head,.full-playback) {will-change:opacity}

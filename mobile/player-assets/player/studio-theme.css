@@ -1,0 +1,27 @@
+/* The desktop shell and both native WebViews share the same surface hierarchy. */
+:root {
+  --studio-bg: var(--skin-background, #10121e);
+  --studio-surface: var(--skin-surface, #1d2233);
+  --studio-ink: var(--skin-ink, #f2f4fc);
+  --studio-accent: var(--skin-accent, #70caff);
+  --studio-muted: color-mix(in srgb, var(--studio-ink) 69%, var(--studio-bg));
+  --studio-line: color-mix(in srgb, var(--studio-ink) 14%, transparent);
+  --studio-control: color-mix(in srgb, var(--studio-ink) 5%, transparent);
+  --studio-selected: color-mix(in srgb, var(--studio-accent) 16%, var(--studio-surface));
+  --studio-keyline: color-mix(in srgb, var(--studio-accent) 46%, transparent);
+  --studio-panel: color-mix(in srgb, var(--studio-surface) 92%, transparent);
+  --studio-wash: radial-gradient(ellipse at 35% 24%, var(--studio-surface), var(--studio-bg) 85%);
+  --studio-radius: 15px;
+  --studio-control-radius: 8px;
+}
+:root[data-phone-theme=light]:not([data-custom-skin]) {
+  --studio-bg: #f3f5fa;
+  --studio-surface: #ffffff;
+  --studio-ink: #202536;
+  --studio-accent: #245c95;
+}
+:root[data-glass=reduced] { --studio-panel: var(--studio-surface) }
+@media (prefers-reduced-transparency: reduce) {
+  :root { --studio-panel: var(--studio-surface) }
+}
+:focus-visible { outline: 2px solid var(--studio-accent); outline-offset: 3px }

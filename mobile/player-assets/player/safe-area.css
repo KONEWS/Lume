@@ -1,0 +1,38 @@
+/* Backgrounds keep the entire viewport. Only readable/tappable content avoids bars. */
+:root {
+  --lume-safe-top: env(safe-area-inset-top, 0px);
+  --lume-safe-right: env(safe-area-inset-right, 0px);
+  --lume-safe-bottom: env(safe-area-inset-bottom, 0px);
+  --lume-safe-left: env(safe-area-inset-left, 0px);
+}
+body { padding-inline: var(--lume-safe-left) var(--lume-safe-right) }
+#library-frame > header { padding-top: calc(8px + var(--lume-safe-top)) }
+html body #library-frame > #sidebar { padding-top: calc(14px + var(--lume-safe-top)) }
+body #full .full-head {
+  padding-top: calc(12px + var(--lume-safe-top));
+  padding-left: calc(22px + var(--lume-safe-left));
+  padding-right: calc(22px + var(--lume-safe-right));
+}
+#full:not(.lyrics-screen) .full-content {
+  padding-left: calc(26px + var(--lume-safe-left));
+  padding-right: calc(26px + var(--lume-safe-right));
+  padding-bottom: max(18px, var(--lume-safe-bottom));
+}
+html body #full.lyrics-screen .full-head {
+  padding-top: calc(12px + var(--lume-safe-top));
+  padding-inline: max(18px, var(--lume-safe-left)) max(18px, var(--lume-safe-right));
+}
+html body #full.lyrics-screen #lyrics-panel {
+  padding-left: max(8vw, var(--lume-safe-left));
+  padding-right: max(8vw, var(--lume-safe-right));
+}
+:is(dialog#room-invite, dialog.list-editor, dialog#queue-sheet) {
+  max-height: min(86dvh, calc(100dvh - var(--lume-safe-top)));
+  padding-left: max(22px, var(--lume-safe-left));
+  padding-right: max(22px, var(--lume-safe-right));
+}
+@media (orientation:landscape) and (min-width:540px) and (max-height:600px) {
+  #library-frame > header { padding-top: var(--lume-safe-top) }
+  #full:not(.lyrics-screen) .full-head { padding-top: calc(2px + var(--lume-safe-top)) }
+  #full:not(.lyrics-screen) .full-content { padding-bottom: max(6px, var(--lume-safe-bottom)) }
+}

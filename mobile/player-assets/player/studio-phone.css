@@ -1,0 +1,196 @@
+body, body.liquid-stage, :root[data-phone-theme=light]:not([data-custom-skin]) body {
+  --page: var(--studio-bg); --panel: var(--studio-surface); --accent: var(--studio-accent);
+  --ink: var(--studio-ink); --muted: var(--studio-muted); --lg-color-focus: var(--accent);
+  --lg-radius-panel: 15px; --lg-radius-chrome: 8px;
+  color: var(--ink); background: var(--studio-wash);
+}
+body :is(h1,h2,.meta), body.liquid-stage :is(h1,h2,.meta) { text-shadow: none }
+#library-frame>header { padding: 8px 16px; border-bottom: 1px solid var(--studio-line) }
+.brand i, .brand i::after { border-color: var(--accent) }
+#source { color: var(--muted); letter-spacing: 0 }
+#scroll { padding: 14px clamp(16px,4.5vw,32px) 18px }
+#scroll h1 { margin: 6px 0 14px; font-size: 26px; font-weight: 650; letter-spacing: -.02em }
+#scroll h2 { font-size: 18px; font-weight: 600; letter-spacing: 0 }
+#scroll .hero {
+  display: grid; grid-template-columns: minmax(0,1fr); justify-items: center; align-content: center; gap: 7px; text-align: center;
+  height: auto; min-height: clamp(225px,34vh,345px); padding: 16px 14px 20px;
+  background-color: transparent; background-repeat: no-repeat; background-size: 0 0;
+  border: 0; border-radius: 0; border-bottom: 1px solid var(--studio-line); box-shadow: none; color: var(--ink);
+}
+#scroll .hero::before {
+  inset: 8% 14%; background: inherit; background-size: cover; filter: blur(34px); opacity: .17;
+}
+.hero .hero-cover {
+  width: clamp(82px,13vh,136px); aspect-ratio: 1; border-radius: 13px;
+  background-image: inherit; background-position: center; background-size: cover;
+  outline: 1px solid var(--studio-line); box-shadow: 0 5px 20px #05091624;
+}
+.hero :is(.feature,.hero-info,.hero-open) { position: static; max-width: 100% }
+.hero .feature { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--muted); background: none; border: 0; backdrop-filter: none; padding: 4px 0 0 }
+.feature svg { width: 14px; height: 14px; color: var(--accent) }
+.hero-info { min-width: 0; width: 100% }
+.hero-info strong { display: block; font-size: clamp(24px,5.7vw,33px); font-weight: 600; letter-spacing: -.025em; line-height: 1.25 }
+lume-song-title { position: relative; display: block; contain: inline-size; min-width: 0; overflow: hidden; white-space: nowrap }
+lume-song-title > span { display: block; width: max-content }
+.hero-info lume-song-title > span { margin-inline: auto }
+lume-song-title .title-repeat { display: none }
+@media (prefers-reduced-motion:no-preference) {
+  lume-song-title[data-title][data-scrolling] > span { margin-inline: 0; animation: song-title-pan var(--title-duration) linear infinite }
+  lume-song-title[data-title][data-scrolling] .title-repeat { display: block; position: absolute; top: 0; left: var(--title-cycle) }
+}
+@keyframes song-title-pan {
+  from { transform: translateX(0) }
+  to { transform: translateX(calc(-1 * var(--title-cycle))) }
+}
+.hero-info small { font-size: 13px; color: var(--muted); opacity: 1 }
+.hero .hero-open { display: inline-flex; align-items: center; gap: 6px; width: auto; height: auto; padding: 7px 12px; margin-top: 2px; font-size: 12px; color: var(--accent); border: 1px solid var(--studio-keyline); border-radius: 8px; background: var(--studio-selected); backdrop-filter: none }
+.hero-open svg { width: 14px; height: 14px }
+body .section-title button, body.liquid-stage .section-title button { color: var(--muted) }
+.section-title { margin: 12px 0 4px }
+body .song { min-height: 58px; gap: 11px; border-color: var(--studio-line) }
+.song .thumb, .mini-track .thumb { border-radius: 7px }
+.song .meta strong {
+  font-size: 15px; font-weight: 550; line-height: 1.35; white-space: normal;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2;
+  overflow: hidden; overflow-wrap: anywhere; text-overflow: ellipsis;
+}
+.song.current .meta strong, .song.current .end { color: var(--accent) }
+body #sidebar, :root[data-phone-theme=light] #sidebar {
+  --rail-ink: var(--ink); --rail-muted: var(--muted); --rail-accent: var(--accent);
+  --rail-line: var(--studio-line); --rail-tile: var(--studio-control);
+  background: transparent; border-right: 0; gap: 16px; padding: 14px 16px;
+}
+#browse-links { grid-template-columns: 1fr; gap: 2px }
+#sidebar :is(#browse-links,#manage-links) .side-link {
+  min-height: 44px; padding: 7px 10px; border: 1px solid transparent; border-radius: 8px;
+  background: transparent; font-size: 14px; font-weight: 500;
+}
+#sidebar :is(#browse-links,#manage-links) .side-link[aria-current=page] {
+  border-color: var(--studio-keyline); background: var(--studio-selected); color: var(--accent);
+}
+body #mini, body .search, body .glass-card, body #queue-sheet, body #room-invite,
+body .list-editor, body .library-chart, body footer nav[aria-label] {
+  border: 1px solid var(--studio-line); background: var(--studio-panel); box-shadow: none;
+  border-radius: var(--studio-radius); color: var(--ink);
+}
+#phone-dock {
+  --dock-size: 54px; --dock-gap: 8px;
+  display: flex; flex: none; align-items: center; gap: var(--dock-gap);
+  padding: 6px max(12px,var(--lume-safe-right)) max(6px,var(--lume-safe-bottom)) max(12px,var(--lume-safe-left));
+}
+:root { --dock-surface: color-mix(in srgb,var(--studio-surface) 92%,var(--studio-bg)) }
+.dock-navigation, #phone-dock #mini {
+  height: var(--dock-size); min-width: 0; overflow: hidden; border-radius: 0;
+  background: transparent; border: 0;
+}
+/* The drawer, library and dock expose one viewport-sized background. Controls
+   retain their positions and hit areas without looking like separate cards. */
+html body #phone-dock #mini,
+html body #phone-dock #dock-tabs {
+  background: transparent; border: 0; box-shadow: none; border-radius: 0;
+}
+#phone-dock { position:relative }
+#phone-dock .dock-navigation { position:relative }
+#phone-dock .dock-navigation::after {
+  content:''; position:absolute; right:0; top:14px; bottom:14px;
+  width:1px; background:var(--studio-line); pointer-events:none;
+}
+.dock-navigation {
+  flex: 0 0 calc(100% - var(--dock-size) - var(--dock-gap));
+  transition: flex-basis 260ms cubic-bezier(.22,.76,.3,1);
+}
+#phone-dock[data-open=mini] .dock-navigation { flex-basis: var(--dock-size) }
+#dock-tabs {
+  width: 100%; max-width: none; height: 100%; align-items: center; margin: 0; padding: 3px;
+  background: transparent; border: 0; box-shadow: none; border-radius: inherit;
+}
+#dock-tabs button { flex: 1; min-width: 0; min-height: 44px }
+#dock-tabs button i { padding: 0 }
+#dock-tabs button[aria-current=page] { color: var(--accent); font-weight: 750 }
+#dock-tabs button[aria-current=page] i { background: transparent; box-shadow: none }
+#dock-nav-button {
+  width: 100%; height: 100%; display: grid; place-content: center; justify-items: center;
+  color: var(--accent); font-size: 10px; line-height: 13px; white-space: nowrap;
+}
+#dock-nav-button svg { width: 20px; height: 20px }
+#phone-dock #mini { flex: 1; padding: 0 4px; gap: 0 }
+#phone-dock .mini-track { gap: 6px; height: 100%; overflow: hidden; border-radius: inherit }
+#phone-dock #mini-art { flex: none; width: 42px; height: 42px; border-radius: 50% }
+#phone-dock #mini .icon { border-radius: 50% }
+#phone-dock[data-open=nav] .mini-track { justify-content: center }
+#phone-dock[data-open=nav] :is(#dock-nav-button,.mini-track .meta,#mini .icon,#mini-progress),
+#phone-dock[data-open=mini] #dock-tabs { display: none }
+@media (max-width:350px) {
+  #phone-dock { --dock-gap: 5px; padding-inline: 5px }
+  #phone-dock #mini-art { width: 36px; height: 36px }
+}
+@media (prefers-reduced-motion:reduce) { .dock-navigation { transition: none } }
+body :is(#mini,.transport,.full-head) .icon, body #output { color: var(--ink); background: transparent; border: 1px solid transparent; box-shadow: none; border-radius: 8px }
+body :is(#mini,.transport) .toggle, body.liquid-stage .pill, body .pill {
+  color: var(--accent); border: 1px solid var(--studio-keyline); background: var(--studio-selected); border-radius: 8px; box-shadow: none;
+}
+body .filters [data-lens-marker] { background: var(--studio-selected); border: 1px solid var(--studio-keyline); border-radius: 9px; box-shadow: none }
+body .search { border-radius: 8px }
+body .room-symbol { border-radius: 10px; background: var(--studio-selected); color: var(--accent) }
+body .glass-card { margin-top: 14px; padding: 19px }
+body #album { border-radius: 14px; border: 1px solid var(--studio-line); box-shadow: 0 12px 40px #090b172b }
+body #full, body #full[data-lyric-direction], body .morph-material { background: var(--studio-wash) }
+#full:not(.lyrics-screen) .full-meta h1 { font-weight: 600; letter-spacing: -.02em }
+body .transport .toggle { width: 56px; height: 56px; border-radius: 12px }
+#full.lyrics-screen :is(.full-head,.full-playback) { background: transparent; color: #f2f4fc }
+#full.lyrics-screen :is(.full-head,.full-playback) { --ink: #f2f4fc; --muted: #c2cadb; --panel: #1d2233; --accent: #70caff }
+/* Plain lyrics share the full player's continuous theme surface. The same
+   playback container remains when only the translation control is visible. */
+#full.lyrics-screen:has(#lyrics-panel:not([hidden])) :is(.full-head,.full-playback) {
+  color:var(--studio-ink);--ink:var(--studio-ink);--muted:var(--studio-muted);--panel:var(--studio-surface);--accent:var(--studio-accent);
+}
+#full.lyrics-screen #lyric-style { color: var(--ink); background-color: var(--panel) }
+@media (orientation:landscape) {
+  #full.lyrics-screen .full-meta h1 { font-size: 16px; line-height: 1.25; margin-bottom: 2px }
+  #full.lyrics-screen .transport svg { width: 20px; height: 20px }
+  #full.lyrics-screen .transport .toggle { width: 44px; height: 44px }
+  .hero-info lume-song-title > span { margin-inline: 0 }
+}
+#browse:not(:has(.drawer-range-setting)) :is(.stat-row,.collection-row) { border-color: var(--studio-line) }
+body .scan-progress progress { accent-color: var(--accent) }
+@media (max-height:540px) and (orientation:landscape) {
+  #scroll .hero { min-height: 145px; grid-template-columns: 100px minmax(0,320px); justify-content: center; column-gap: 24px }
+  .hero .hero-cover { grid-row: 1/4; width: 96px }
+  .hero :is(.feature,.hero-info,.hero-open) { justify-self: start; text-align: left }
+}
+@media (orientation:landscape) and (min-width:540px) and (max-height:600px) {
+  #library-frame>header { min-height: 40px; padding-block: 0 }
+  #scroll { padding-block: 8px }
+  #home:not([hidden]) {
+    display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1.15fr);
+    grid-template-rows: auto 1fr; gap: 0 22px; max-width: 960px;
+  }
+  #home>h1 { font-size: 19px; margin: 4px 0 }
+  #home .section-title { grid-area: 1/2; margin: 0 }
+  #home .section-title h2 { font-size: 16px }
+  #home .section-title button { min-height: 36px }
+  #home .hero {
+    grid-area: 2/1; min-height: 132px; align-self: start; padding: 10px 0;
+    grid-template-columns: minmax(60px,30%) minmax(0,1fr); gap: 5px 12px; border: 0;
+  }
+  #home .hero-cover { grid-row: 1/4; width: 100%; max-width: 110px }
+  #home .hero-info { min-width: 0; width: 100% }
+  .hero-info strong { font-size: 20px }
+  #home .hero :is(.feature,.hero-info,.hero-open) { justify-self:start; text-align:left }
+  #upnext { grid-area: 2/2 }
+  #scroll .song { min-height: 48px }
+  #phone-dock { --dock-size: 48px; padding-block: 3px max(3px,var(--lume-safe-bottom)) }
+  #full:not(.lyrics-screen) .full-content {
+    display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:20px;
+    align-items:center; max-width:820px; margin:auto; padding-block:6px;
+  }
+  #full:not(.lyrics-screen) #album { justify-self:center; width:min(100%,56vh) }
+  #full:not(.lyrics-screen) .full-playback { display:grid; gap:4px }
+  #full:not(.lyrics-screen) .full-meta h1 { font-size:20px }
+  #full:not(.lyrics-screen) #output { justify-self:center }
+  #full:not(.lyrics-screen) .full-head { padding-block:2px }
+}
+
+.translation-tools{display:flex;justify-content:flex-end}.translation-tools:has(#translation-choice[hidden]){display:none}
+
+#translation-choice[aria-pressed="true"]{background:#5487ad40;color:#76caff;border:1px solid #76caff88}#translation-choice[hidden]{display:none}

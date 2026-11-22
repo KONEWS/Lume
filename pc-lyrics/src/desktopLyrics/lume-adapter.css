@@ -1,0 +1,22 @@
+/* LUME integration only. The Folia scene, toolbar and settings styles remain upstream. */
+.window-drag{-webkit-app-region:drag}
+.window-buttons,.lume-return,.lume-queue{-webkit-app-region:no-drag}
+.window-chrome .lume-return,.window-chrome .lume-queue{display:flex;align-items:center;gap:8px;min-height:28px;padding:3px 8px;border-radius:8px}
+.lume-return span{font-size:11px;letter-spacing:.6px}
+.lume-queue{margin-left:8px}
+.lume-plain-lyrics{position:absolute;inset:114px 8vw 110px;overflow:auto;white-space:pre-wrap;text-align:center;font-size:clamp(18px,2.2vw,30px);line-height:1.9;color:var(--glass-text);padding:30px 0;scrollbar-width:thin}
+.lume-panel-close{float:right;width:28px;height:28px;display:grid;place-items:center}
+.audio-progress.lume-seek-progress{pointer-events:auto;cursor:pointer;touch-action:none}
+.audio-progress.lume-seek-progress:focus-visible{outline:2px solid var(--desktop-glass-accent);outline-offset:-2px}
+.audio-progress.lume-seek-progress::before{content:'';position:absolute;inset:-7px 0 0}
+.desktop-statusbar .transport-buttons button.selected{color:var(--desktop-glass-accent);background:var(--desktop-glass-selected);border-color:var(--desktop-control-selected-border)}
+.desktop-lyrics:not(.native-fullscreen) :is(.desktop-topbar,.desktop-statusbar,.window-chrome){opacity:1;visibility:visible;pointer-events:auto}
+.desktop-lyrics:not(.native-fullscreen){cursor:auto}
+
+.translation-corner{
+  position:absolute;right:24px;bottom:38px;z-index:8;
+  display:grid;place-items:center;width:36px;height:36px;border-radius:50%;
+  border:1px solid var(--desktop-control-selected-border);color:var(--glass-text);
+  background:var(--desktop-glass-bg);cursor:pointer;-webkit-app-region:no-drag;
+}
+.immersive .translation-corner{visibility:hidden}.translation-corner.selected{background:var(--desktop-glass-selected);color:var(--desktop-glass-accent)}

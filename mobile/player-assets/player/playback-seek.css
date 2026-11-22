@@ -1,0 +1,58 @@
+/* Match the desktop rail and outlined thumb, while retaining a 44px touch target. */
+body #full .seek .seek-rail {
+  position: relative;
+  width: 100%;
+  height: 44px;
+  transform: none;
+  transition: none;
+}
+body #full .seek:has(#seek-target:not([hidden])) .seek-rail { transform: none }
+body #full .seek-rail::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  inset-inline: 7px;
+  height: 3px;
+  border-radius: 9px;
+  transform: translateY(-50%);
+  background: linear-gradient(to right, var(--accent) var(--seek-progress, 0%), var(--studio-line, #c0cbe54a) var(--seek-progress, 0%));
+  pointer-events: none;
+}
+body #full .seek-rail #seek {
+  position: relative;
+  z-index: 1;
+  appearance: none;
+  width: 100%;
+  height: 44px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  touch-action: none;
+}
+body #seek::-webkit-slider-runnable-track { height: 3px; background: transparent }
+body #seek::-webkit-slider-thumb {
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  margin-top: -5.5px;
+  border: 0;
+  opacity: 0;
+  background: transparent;
+}
+body #full .seek-rail #seek-lens {
+  position: absolute;
+  z-index: 2;
+  top: 50%;
+  left: calc(var(--seek-progress, 0%) + var(--seek-offset, 7px));
+  width: 14px;
+  height: 14px;
+  transform: translate(-50%, -50%);
+  border: 2px solid var(--accent);
+  border-radius: 50%;
+  background: var(--studio-surface, var(--panel));
+  box-shadow: none;
+  pointer-events: none;
+  transition: none;
+}
+body #full .seek-rail:has(input:disabled) { opacity: .45 }

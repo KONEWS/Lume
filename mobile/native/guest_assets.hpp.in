@@ -1,0 +1,4 @@
+#pragma once
+constexpr auto guestHtml = R"LUME(@guest_html@)LUME";
+constexpr auto guestJs = R"LUME(@guest_js@)LUME";
+constexpr auto outputJs = R"LUME(@output_js@)LUME";

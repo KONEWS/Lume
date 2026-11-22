@@ -1,0 +1,13 @@
+#sort-choices { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); padding: 4px }
+#sort-choices button { min-height: 44px; padding: 8px 12px; text-align: start; color: inherit; font: inherit }
+#sort-choices .wide { grid-column: 1 / -1 }
+#sort-choices [aria-pressed=true] { color: var(--studio-accent); font-weight: 650 }
+#sort-display h3 { margin: 20px 12px 8px; font-size: 13px; color: var(--studio-muted) }
+#sort-display label, #custom-song-order li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; min-height: 52px }
+#sort-display small { display: block; color: var(--studio-muted); font-size: 12px; line-height: 1.5; margin-top: 4px }
+#custom-song-order ol { list-style: none; margin: 0; padding: 0 }
+#custom-song-order li { padding: 2px 12px; border-bottom: 1px solid var(--studio-line); gap: 4px }
+#custom-song-order li span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+#custom-song-order button, #library-list .song-next { min-width: 44px; min-height: 44px; color: var(--studio-accent) }
+#library-list .song-next { display: grid; place-items: center }
+#library-list .song-next svg { width: 20px; height: 20px }

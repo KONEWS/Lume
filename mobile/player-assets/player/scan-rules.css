@@ -1,0 +1,25 @@
+lume-scan-rules{display:block;margin:18px 0;color:inherit}
+lume-scan-rules,lume-scan-rules :is(summary,label,input,button){-webkit-tap-highlight-color:transparent}
+lume-scan-rules .scan-format-section summary,lume-scan-rules .scan-format-list label{-webkit-user-select:none;user-select:none}
+lume-scan-rules .scan-format-section summary:focus{outline:none}
+lume-scan-rules .scan-format-section summary:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:6px}
+lume-scan-rules .scan-format-list input:focus{outline:none!important;box-shadow:none!important}
+lume-scan-rules label,lume-scan-rules div{display:flex;align-items:center;gap:10px;padding:9px 0}
+lume-scan-rules h2{font-size:1.05rem;margin:20px 0 6px}
+lume-scan-rules p{opacity:.75;font-size:.9rem}
+lume-scan-rules span{flex:1;min-width:0;overflow-wrap:anywhere}
+lume-scan-rules button{font:inherit;font-size:.85rem;color:inherit;background:transparent;border:1px solid currentColor;padding:6px 12px;border-radius:12px;cursor:pointer}
+lume-scan-rules button:disabled{opacity:.5;cursor:default}
+lume-scan-rules input{width:18px;height:18px;accent-color:var(--accent)}
+lume-scan-rules .scan-format-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(88px,1fr));gap:10px 12px}
+lume-scan-rules .scan-format-list label{position:relative;justify-content:center;min-height:44px;box-sizing:border-box;cursor:pointer;border:1px solid color-mix(in srgb,currentColor 22%,transparent);border-radius:12px;padding:10px;font-weight:600;background:transparent}
+lume-scan-rules .scan-format-list input{position:absolute;width:1px;height:1px;margin:-1px;padding:0;border:0;overflow:hidden;clip:rect(0,0,0,0);clip-path:inset(50%);white-space:nowrap}
+lume-scan-rules .scan-format-list label:has(input:checked){color:var(--accent);border-color:var(--accent);background:color-mix(in srgb,var(--accent) 22%,transparent)}
+lume-scan-rules .scan-format-list label:has(input:focus-visible){outline:2px solid var(--accent);outline-offset:3px}
+lume-scan-rules .scan-format-list label:has(input:disabled){opacity:.5;cursor:default}
+lume-scan-rules input[type=checkbox]{flex-shrink:0}
+lume-scan-rules .scan-format-custom{flex-wrap:wrap}
+lume-scan-rules input[type=text]{width:auto;min-width:0;flex:1 1 120px;height:40px;box-sizing:border-box;font:inherit;color:inherit;background:transparent;border:1px solid currentColor;border-radius:10px;padding:6px 10px}
+lume-scan-rules .scan-format-custom button{min-height:40px}
+lume-scan-rules .scan-format-section{margin-top:20px}
+lume-scan-rules .scan-format-section summary{font-size:1.05rem;font-weight:600;cursor:pointer;padding:10px 0;min-height:24px}

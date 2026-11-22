@@ -1,0 +1,8 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="local.lume.receiver" android:versionCode="29" android:versionName="0.5.21">
+<uses-sdk android:minSdkVersion="28" android:targetSdkVersion="36"/>
+<uses-permission android:name="android.permission.INTERNET"/>
+<uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
+<uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS"/>
+<application android:extractNativeLibs="true" android:label="澄音 LUME" android:theme="@style/LumeTheme" android:usesCleartextTraffic="true" android:allowBackup="false" android:enableOnBackInvokedCallback="false">
+<activity android:name=".MainActivity" android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden" android:exported="true"><intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter></activity>
+</application></manifest>

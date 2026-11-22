@@ -1,0 +1,111 @@
+import type { VisualizerBackgroundMode, VisualizerMode } from '../types';
+
+// src/desktopLyrics/desktopSettingsSearchVisual.ts — explicit panel labels, including parameters hidden by mode or prerequisites.
+type VisualCatalog = { mode: VisualizerMode; labelKey: string; keys: readonly string[] };
+type BackgroundCatalog = { background: VisualizerBackgroundMode; labelKey: string; keys: readonly string[] };
+const options = (names: string) => names.split(/\s+/).filter(Boolean).map(name => `options.${name}`);
+
+export const DESKTOP_MODE_SEARCH_CATALOG: VisualCatalog[] = [
+  { mode: 'metaphor', labelKey: 'ui.visualizerMetaphor', keys: options(`metaphorCameraSection metaphorCutPace metaphorCameraMotion
+    metaphorNegative metaphorTransitions metaphorInkSection metaphorFlip metaphorKeywordColors metaphorFlow metaphorBlobs
+    metaphorHalftone metaphorGrain lyricRenderSection lyricRenderScale`) },
+  { mode: 'machi', labelKey: 'ui.visualizerMachi', keys: options(`machiSceneSection machiScene machiSceneAuto machiSceneKonbini machiSceneStation machiSceneKowloon machiSkySection machiTimeOfDay machiTimeAuto machiTimeDay machiTimeDusk machiTimeNight machiWeather machiWeatherAuto machiWeatherClear machiWeatherRain machiWeatherSnow machiWeatherFog machiCameraSection machiCameraMode machiCameraDefault machiCameraCustom machiViewAzimuth machiViewElevation machiViewZoom machiViewPanX machiViewPanZ machiViewReset machiViewScene machiCameraMotion machiCameraMotionSpeed machiCameraBar machiCameraBarView machiCameraBarLens machiCameraBarMotion machiCameraBarReset machiCameraBarClose machiDofSection machiAperture machiDof machiDofRange machiTiltShift machiFocus machiFocusCenter machiFocusLyrics machiFocusManual machiFocusOffset machiQualitySection machiQuality machiQualityCustom machiQualityHigh machiQualityBalanced machiQualityLow machiRenderScale machiAntialias machiAntialiasOff machiAntialiasFxaa machiAntialiasSmaa machiAntialiasSsaa machiShadows machiReflections machiLevelOff machiLevelLow machiLevelHigh machiGlow machiAdaptive machiSimulatedBeat`) },
+  { mode: 'nebbia', labelKey: 'ui.visualizerNebbia', keys: options(`nebbiaWriting nebbiaWindow nebbiaAppear nebbiaAppearAuto nebbiaAppearWrite nebbiaAppearFade nebbiaFade nebbiaFadeFog nebbiaFadeFingers nebbiaFadeMix nebbiaAppearBreath nebbiaCustom nebbiaLayouts nebbiaJitter nebbiaWarp nebbiaCredits nebbiaLayout_ribbon nebbiaLayout_lines2 nebbiaLayout_lines3 nebbiaLayout_cross nebbiaLayout_pillar nebbiaLayout_header nebbiaLayout_badge nebbiaLayout_columns nebbiaLayout_orbit nebbiaStrokeWidth nebbiaWriteSpeed nebbiaDoodle nebbiaMist nebbiaHold nebbiaRefog nebbiaBusSpeed nebbiaNeon nebbiaBump nebbiaSpot nebbiaSpotX nebbiaRainHit nebbiaRainBig nebbiaScenery nebbiaScenery_spot nebbiaScenery_buildings nebbiaScenery_lights nebbiaScenery_cars nebbiaScenery_road nebbiaRain nebbiaRain_slant nebbiaRain_straight nebbiaRain_off nebbiaBehind nebbiaBehind_night nebbiaBehind_backdrop nebbiaBehind_aquarium nebbiaJellies nebbiaJellySize nebbiaBubbles nebbiaGlass nebbiaGlassStyle nebbiaGlass_rain nebbiaGlass_dew nebbiaGlass_snow nebbiaDew nebbiaDewSize nebbiaDewGlint nebbiaSnow nebbiaSnowSize nebbiaSnowMelt nebbiaAquaScenery_spot nebbiaAquaScenery_buildings nebbiaAquaScenery_lights nebbiaAquaScenery_cars nebbiaAquaScenery_road nebbiaAquaRain nebbiaAquaRain_slant nebbiaAquaRain_straight nebbiaAquaRain_off`) },
+  { mode: 'classic', labelKey: 'ui.visualizerClassic', keys: options(`classicSettings classicWordRotation classicLegacyLayout
+    classicBreathingFloatMultiplier classicWordSpacing avoidOverlap`) },
+  { mode: 'cadenza', labelKey: 'ui.visualizerCadenze', keys: [] },
+  { mode: 'partita', labelKey: 'ui.visualizerPartita', keys: options(`partitaSettings partitaGuideLines partitaSemanticLayout
+    partitaStaggerMin partitaStaggerMax avoidOverlap`) },
+  { mode: 'fume', labelKey: 'ui.visualizerFume', keys: options(`fumeSettings fumeHidePrintSymbols fumeGeometricBackground
+    fumeBackgroundObjectOpacity fumeTextHoldRatio fumeCameraSpeed fumeCameraTrackingMode fumeGlowIntensity fumeHeroScale`) },
+  { mode: 'claddagh', labelKey: 'ui.visualizerCladdagh', keys: options(`claddaghSettings claddaghShowAxisLine claddaghFocusScaleRatio claddaghRadiusScale claddaghEllipseTiltDeg claddaghLetterSpacingOffset claddaghPositionX claddaghPositionY claddaghShowTranslation claddaghTranslationScale claddaghTranslationLetterSpacingOffset`) },
+  { mode: 'cappella', labelKey: 'ui.visualizerCappella', keys: options(`cappellaSettings cappellaAvatarSource cappellaAvatarUpload
+    cappellaAvatarClear cappellaShowEmoMessages cappellaEmojiSource cappellaEmojiUpload cappellaEmojiClear`) },
+  { mode: 'tilt', labelKey: 'ui.visualizerTilt', keys: options(`tiltSettings tiltSplitProbability tiltStyleProbability tiltColorScheme`) },
+  { mode: 'diorama', labelKey: 'ui.visualizerDiorama', keys: options(`dioramaSettings dioramaCameraSpeed dioramaAudioReactivity
+    dioramaMotionAmount dioramaGeometry dioramaGeometryMode dioramaGeometryStrands dioramaGeometryRings dioramaGeometryBlobs
+    dioramaGeometryRibbons dioramaParticleScale dioramaParticleDensity dioramaParticleGlow dioramaParticleGlowIntensity
+    dioramaGradientEffect dioramaGlowEffect dioramaSoulEffect dioramaSoulActiveEffect dioramaKeywordColoring
+    dioramaShowParticles dioramaMoteCircumference dioramaMoteRadial dioramaEffectStrength dioramaCustomStrength`) },
+  { mode: 'pendolo', labelKey: 'ui.visualizerPendolo', keys: options(`pendoloWheelCenterX pendoloArcRadius pendoloArcAngleDeg pendoloTickSnappiness pendoloActiveScale pendoloShowGearDecor pendoloShowCenterGradient pendoloShowCoverOnWatchFace pendoloEnableLineGlow pendoloMirrorLayout pendoloTiltDeg pendoloTiltAxisDeg pendoloParallaxDepth pendoloHubView pendoloHubViewHeight pendoloHubViewBack pendoloPresetDefault`) },
+  { mode: 'monet', labelKey: 'ui.visualizerMonet', keys: options(`lyricsStyleSettings monetFontScale monetKeywordColoring cappellaAvatarSource monetPortraitSource monetPortraitStyle monetPortraitDragHanger monetUploadPortrait monetClearPortrait monetShowAudioVisualization monetAudioStyle monetShowDescription monetMirrorLayout monetCustomDescription monetChromeVisibilityAuto monetChromeVisibilityAlways monetChromeVisibilityHidden monetPortraitSourceNone monetPortraitSourceMirrored`) },
+  { mode: 'sonnet', labelKey: 'ui.visualizerSonnet', keys: options(`sonnetQualitySection sonnetTextureResolution
+    sonnetMotionSection sonnetCameraIntensity sonnetTypographyMotion sonnetOuterFrameMode sonnetMgDensity
+    sonnetPostProcessSection sonnetPostProcessEnabled sonnetPostProcessGrain sonnetPostProcessContrast sonnetPostProcessRgbShift
+    sonnetPostProcessVignette sonnetPostProcessHalftone sonnetPostProcessLensDistortion sonnetPostProcessLensDispersion
+    sonnetDisplaySection sonnetShowBackgroundMg sonnetShowBackgroundDecor sonnetShowFixedGeo sonnetShowOnlyText
+    sonnetShowGuide sonnetShowGiantDecorativeText sonnetEnableTransitions`) },
+  { mode: 'tempera', labelKey: 'ui.visualizerTempera', keys: options(`temperaImageSection temperaDepthStrength temperaQualitySection
+    temperaTextureResolution temperaMotionSection temperaCameraIntensity temperaGlyphMotion temperaGlyphSettleStretch
+    temperaColorMode temperaPostProcessSection temperaPostProcessEnabled temperaPostProcessTextureCompression
+    temperaPostProcessGrain temperaPostProcessContrast temperaPostProcessRgbShift temperaPostProcessVignette temperaPostProcessLensDistortion
+    temperaLyricSection temperaWholeLineLyrics temperaDisplaySection temperaShowBlocks temperaShowDecor
+    temperaShowCornerMarks temperaTextInversion temperaEnableTransitions temperaAddLayerImage temperaClearLayerImages
+    temperaExportImages temperaImportImages temperaImportAppendImages temperaImportReplaceImages temperaLayerImageDepth
+    temperaLayerImageFrequency temperaLayerAlignVerticalRandom temperaLayerAlignHorizontalRandom temperaLayerAlignFree
+    temperaLayerImageScale temperaLayerImageOpacity temperaRemoveLayerImage temperaLayerImageSave`) },
+  { mode: 'lumiere', labelKey: 'ui.visualizerLumiere', keys: options(`lumiereLightSection lumiereLightIntensity
+    lumiereAudioResponse lumiereBloom lumiereTextBloom lumiereAtmosphereSection lumiereDarkField lumiereFogDensity lumiereFogOctaves
+    lumiereMoteAmount lumiereFrontBokeh lumiereLineArt lumiereOverlayFrame lumiereTextSection lumiereTextOnly lumiereUnlitOpacity
+    lumiereWindowNeighbors lumiereDecay lumiereEcho lumiereTrails lumiereHideTrails lumiereSeamlessTransitions lumiereThemeSection lumiereThemeColorMix
+    lumiereKeywordColors lumiereThemeIcons lumierePerformanceSection lumiereRenderQuality`) },
+  { mode: 'hanabi', labelKey: 'ui.visualizerHanabi', keys: options(`hanabiFireworksSection hanabiStageSection hanabiTextSection
+    hanabiDecorSection hanabiColorSection hanabiPerformanceSection hanabiSparkAmount hanabiGlow hanabiChorusBloom hanabiBloom
+    hanabiLaunches hanabiSky hanabiRiseSpeed hanabiSpin hanabiAmbient hanabiOverlayFrame hanabiTextOnly hanabiTextMotion
+    hanabiBlockOpacity hanabiCollage hanabiOrnamentAmount hanabiColorMode hanabiRenderQuality`) },
+  { mode: 'still', labelKey: 'ui.visualizerStill', keys: [] },
+];
+
+export const DESKTOP_BACKGROUND_SEARCH_CATALOG: BackgroundCatalog[] = [
+  { background: 'common', labelKey: 'options.visualizerBackgroundModeCommon', keys: [
+    ...options(`disableVisualizerVignette disableVisualizerGeometricBackground previewCoverBackgroundSettings previewCoverBackgroundOpacity`),
+    'theme.addCoverColor',
+  ] },
+  { background: 'monet', labelKey: 'options.visualizerBackgroundModeMonet', keys: options(`monetGroupBackgroundSource monetBackgroundSource monetUploadBackground monetClearBackground monetGroupLayoutPosition
+    monetBackgroundLayout monetHalfPaneOffsetX monetGroupColorTintWash monetBackgroundOverlayOpacity monetBackgroundWash
+    monetBackgroundWashColorMode monetBackgroundWashCustomColor monetGroupFiltersPostProcessing monetBackgroundBlur
+    monetBackgroundGrayscale monetBackgroundSaturation monetBackgroundDriftEnabled monetBackgroundDriftStrength monetBackgroundStreaksEnabled`) },
+  { background: 'nomand', labelKey: 'options.visualizerBackgroundModeNomand', keys: options(`nomandBackgroundSettings
+    nomandBackgroundSource monetUploadBackground monetClearBackground nomandBackgroundOverlay nomandBackgroundOverlayOpacity
+    nomandBackgroundEffect nomandBackgroundEffectDithering nomandBackgroundDitheringType nomandBackgroundSize
+    nomandBackgroundColorSteps nomandBackgroundOriginalColors nomandBackgroundInverted nomandBackgroundEffectFlutedGlass
+    nomandBackgroundFlutedGlassSize nomandBackgroundFlutedGlassDistortion nomandBackgroundFlutedGlassBlur
+    nomandBackgroundEffectPaperTexture nomandBackgroundPaperTextureContrast nomandBackgroundPaperTextureRoughness
+    nomandBackgroundPaperTextureFiber nomandBackgroundEffectHalftoneDots nomandBackgroundHalftoneDotsSize
+    nomandBackgroundHalftoneDotsRadius nomandBackgroundHalftoneDotsContrast nomandBackgroundEffectLensDistortion
+    nomandBackgroundLensDistortionSpread nomandBackgroundLensDistortionBulge nomandBackgroundLensDistortionDispersion`) },
+  { background: 'latent', labelKey: 'options.visualizerBackgroundModeLatent', keys: options(`latentBackgroundSettings
+    latentDisplayMode latentColorSource latentDynamicOnlyInPlayer latentEnhancedBeatResponse nomandBackgroundOverlay
+    nomandBackgroundOverlayOpacity latentDitheringGroup latentDitheringSize
+    latentDitheringOpacity latentMeshGroup latentMeshDistortion latentMeshSwirl`) },
+  { background: 'sora', labelKey: 'options.visualizerBackgroundModeSora', keys: options(`soraBackgroundSettings soraBlank`) },
+];
+
+// Conditions describe a safe landing point; navigation opens disclosures without changing the stored effect.
+export function desktopVisualSearchCondition(labelKey: string, mode?: VisualizerMode, background?: VisualizerBackgroundMode) {
+  if (mode === 'claddagh' && ['options.claddaghTranslationScale', 'options.claddaghTranslationLetterSpacingOffset'].includes(labelKey))
+    return { fallbackKey: 'options.claddaghShowTranslation' };
+  if (mode === 'monet' && labelKey === 'options.monetCustomDescription') return { fallbackKey: 'options.monetShowDescription' };
+  if (mode === 'pendolo' && /^options\.pendolo(?:HubViewHeight|HubViewBack|TiltDeg|TiltAxisDeg)$/.test(labelKey))
+    return { fallbackKey: 'options.pendoloHubView' };
+  if (mode === 'classic' && labelKey === 'options.classicWordSpacing') return { fallbackKey: 'options.classicLegacyLayout' };
+  if (mode && ['tempera', 'sonnet'].includes(mode) && labelKey.startsWith(`options.${mode}PostProcess`)
+    && !labelKey.endsWith('Section') && !labelKey.endsWith('Enabled')) return { fallbackKey: `options.${mode}PostProcessEnabled` };
+  if (mode === 'tempera' && /tempera(?:Layer|ClearLayer|ExportImages|ImportImages|ImportAppend|ImportReplace|RemoveLayer)/.test(labelKey))
+    return { fallbackKey: 'options.temperaImageSection' };
+  if (mode === 'diorama') {
+    if (/diorama(?:Geometry(?!$)|Particle)/.test(labelKey)) return { contextKey: 'options.dioramaGeometry', fallbackKey: 'options.dioramaGeometry' };
+    if (/dioramaMote/.test(labelKey)) return { contextKey: 'options.dioramaShowParticles', fallbackKey: 'options.dioramaShowParticles' };
+    if (labelKey === 'options.dioramaSoulActiveEffect') return { contextKey: 'options.dioramaSoulEffect', fallbackKey: 'options.dioramaSoulEffect' };
+  }
+  if (background === 'common' && labelKey === 'options.previewCoverBackgroundOpacity') return { fallbackKey: 'theme.addCoverColor' };
+  if (background === 'monet' && labelKey === 'options.monetBackgroundWashCustomColor') return { fallbackKey: 'options.monetBackgroundWashColorMode' };
+  if (background === 'monet' && labelKey === 'options.monetHalfPaneOffsetX') return { fallbackKey: 'options.monetBackgroundLayout' };
+  if (background === 'monet' && labelKey === 'options.monetBackgroundDriftStrength') return { fallbackKey: 'options.monetBackgroundDriftEnabled' };
+  if (background === 'nomand') {
+    for (const effect of ['FlutedGlass', 'PaperTexture', 'HalftoneDots', 'LensDistortion'])
+      if (labelKey.startsWith(`options.nomandBackground${effect}`)) return { fallbackKey: `options.nomandBackgroundEffect${effect}` };
+    if (/nomandBackground(?:Dithering|Size|ColorSteps)/.test(labelKey)) return { fallbackKey: 'options.nomandBackgroundEffectDithering' };
+  }
+  return {};
+}

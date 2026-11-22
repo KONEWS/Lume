@@ -1,0 +1,29 @@
+plugins { id 'com.android.application' version '8.13.2' }
+android {
+    namespace 'local.lume.receiver'
+    compileSdk 36
+    sourceSets.main.assets.srcDir layout.buildDirectory.dir('optimized-player-assets')
+    externalNativeBuild { cmake { path file('../../native/CMakeLists.txt') } }
+    defaultConfig {
+        ndk { abiFilters 'arm64-v8a' }
+        externalNativeBuild { cmake { arguments '-DANDROID_STL=c++_static' } }
+        applicationId 'local.lume.receiver'
+        minSdk 28
+        targetSdk 36
+        versionCode 28
+        versionName '0.5.20'
+    }
+}
+tasks.register('prepareMobilePlayerAssets', Exec) {
+    def inputAssets = file('../../player-assets')
+    def outputAssets = layout.buildDirectory.dir('optimized-player-assets').get().asFile
+    def optimizer = file('../../optimize-player-assets.py')
+    inputs.dir inputAssets
+    inputs.file optimizer
+    outputs.dir outputAssets
+    doFirst {
+        project.sync { from inputAssets; into outputAssets }
+    }
+    commandLine 'python', optimizer.absolutePath, new File(outputAssets, 'player').absolutePath
+}
+tasks.named('preBuild').configure { dependsOn 'prepareMobilePlayerAssets' }

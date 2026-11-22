@@ -1,0 +1,41 @@
+/* Fixed stage bounds keep the refraction source at display resolution in long libraries. */
+body.liquid-stage{height:100vh;height:100dvh;overflow:hidden}
+body.liquid-stage #root{height:100%;overflow:auto}
+body.liquid-stage .app-shell,body.liquid-stage .pairing-screen{background:transparent}
+.liquid-stage .ambient,.liquid-stage .grain{display:none}
+.liquid-stage .sidebar{top:calc(var(--titlebar) + 10px);bottom:12px;left:9px;width:calc(var(--sidebar) - 14px);border-radius:23px}
+.liquid-stage .player-bar{border-radius:26px}
+.liquid-stage .play-button{color:#effff8;border-color:#ecfff8a6}
+.liquid-stage .primary-nav .selected{color:#e3fff2}
+.liquid-stage .hero-wash{background:linear-gradient(105deg,#04232d65,#062e3511 65%,#90e1d10f)}
+.liquid-stage .hero-copy p,.liquid-stage .hero-footnote,.liquid-stage .section-heading small,.liquid-stage .breadcrumb,.liquid-stage .album-meta span{color:#c3d9d7}
+.liquid-stage .player-bar,.liquid-stage .sidebar{--muted:#c3d9d7;--dim:#a4c7c2}
+.liquid-stage .hero,.liquid-stage .player-bar,.liquid-stage .sidebar{text-shadow:0 1px 3px #00212d66}
+.liquid-stage .window-titlebar{background:#0c232ccd}
+.liquid-stage .track-row,.liquid-stage .album-meta{text-shadow:0 1px 4px #092833aa}
+.liquid-stage .modal{background:linear-gradient(145deg,#284953f2,#152f38fa);border:1px solid #b2e4df62}
+@media(min-width:851px){.liquid-stage .sidebar{padding-left:16px;padding-right:16px}}
+@media(max-width:640px){.liquid-stage .player-bar,.liquid-stage .mobile-nav{border-radius:20px}}
+.dock-material{display:none}
+.webgl-ready .player-bar{isolation:isolate;overflow:hidden}
+.webgl-ready .dock-material{display:block;position:absolute;inset:0;width:100%;height:100%;border-radius:inherit;pointer-events:none;z-index:-1}
+.liquid-stage .primary-nav .selected,.liquid-stage .mobile-nav .selected{background:transparent;border-color:transparent;box-shadow:none;color:#eef3ff}
+.liquid-stage .primary-nav .selected i{display:none}
+.primary-nav [data-lens-marker]{border-radius:15px}
+:root:not([data-custom-skin]){--mint:#b2c2e6;--accent:#b9caff}
+:root:not([data-custom-skin]) .window-titlebar{background:#101828e3}
+:root:not([data-custom-skin]) .liquid-stage .hero-copy p,:root:not([data-custom-skin]) .liquid-stage .breadcrumb,:root:not([data-custom-skin]) .liquid-stage .album-meta span{color:#c8d1e8}
+.liquid-range{position:relative;flex:1;min-width:0;height:20px;display:flex;align-items:center}
+.liquid-range input[type=range]{width:100%;margin:0;appearance:none;background:transparent;height:100%;position:relative;z-index:1;touch-action:none}
+.liquid-range input[type=range]::-webkit-slider-runnable-track{height:3px;border-radius:9px;background:linear-gradient(to right,var(--accent) calc(var(--progress) + var(--thumb-offset)),#c0cbe54a calc(var(--progress) + var(--thumb-offset)))}
+.liquid-range input[type=range]::-webkit-slider-thumb{width:14px;height:18px;margin-top:-7px;background:transparent;box-shadow:none;opacity:0}
+.liquid-range i{pointer-events:none;position:absolute;z-index:2;top:50%;left:calc(var(--progress) + var(--thumb-offset));width:14px;height:13px;transform:translate(-50%,-50%);border-radius:999px;border:1px solid #e1eaffb8;background:linear-gradient(135deg,#dfebffab,#657db2ad);box-shadow:0 1px 4px #0b102890;transition:width .16s}
+.liquid-range:has(input:active) i{width:18px;transition:width .16s}
+@media(max-width:640px){.playback-progress .liquid-range{height:5px}.playback-progress .liquid-range i{height:5px}}
+@media(prefers-reduced-motion:reduce){.liquid-range i,.liquid-range:has(input:active) i{transition:none}}
+body.acrylic.liquid-stage [data-glass]{background:linear-gradient(130deg,#ecf2ff15,#788dae0b 55%,#a7b7e31a),color-mix(in srgb,var(--skin-surface,#26344d) 58%,transparent);backdrop-filter:blur(20px) saturate(135%);-webkit-backdrop-filter:blur(20px) saturate(135%);border-color:#d5e2ff45}
+body.acrylic.liquid-stage .player-bar{background:linear-gradient(125deg,#d2e4ff18,#0e183333),color-mix(in srgb,var(--skin-surface,#26344d) 78%,transparent);backdrop-filter:blur(26px) saturate(145%);box-shadow:inset 0 1px 0 #ffffff55,0 12px 36px #020b204d}
+body.acrylic.liquid-stage [data-lens-marker]{background:linear-gradient(140deg,#dde9ff47,#b8cbff24);border-color:#d5e3ff88}
+body.acrylic.liquid-stage .play-button{background:linear-gradient(145deg,#9eb3e579,#6885bb3d);color:#fff}
+body.acrylic.liquid-stage .grain{display:block;opacity:.035}
+.liquid-range:has(input[data-tracking]) i{width:19px;transition:width .12s}

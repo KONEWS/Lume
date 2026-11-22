@@ -1,0 +1,16 @@
+.library-heading {display:flex;align-items:center;padding-block:3px;margin-bottom:8px}
+#scroll .library-heading h1 {margin:0}
+/* The frame ends above the dock, whose layout already includes native safe insets.
+   Keep this control outside the scroller so it never scrolls away or clips. */
+#locate-current {display:none;position:absolute;z-index:2;right:max(18px,calc((100% - 630px)/2));bottom:16px;align-items:center;justify-content:center;width:52px;height:52px;padding:0;border:1px solid var(--studio-keyline);border-radius:50%;background:var(--studio-surface);color:var(--studio-accent);box-shadow:0 4px 16px color-mix(in srgb,var(--studio-ink) 16%,transparent);touch-action:manipulation}
+#library-frame:has(#library:not([hidden])) > #locate-current {display:flex}
+body:is(.drawer-open,.drawer-dragging) #locate-current {visibility:hidden}
+#locate-current svg {width:24px;height:24px;pointer-events:none}
+/* Let even the final song and its menu scroll completely above the button. */
+#library {padding-bottom:76px}
+#library-list,.song,.song > .song-play,.song > .end {background:transparent}
+/* Rows retain their themed min-height while offscreen controls and art skip layout and paint. */
+#library-list > .song {content-visibility:auto;contain-intrinsic-block-size:auto 0px}
+/* Playback already uses the theme accent on the title and menu. A brief weight
+   change identifies the located row without painting a card or selection frame. */
+#library-list .song.located-current .meta strong {font-weight:700}

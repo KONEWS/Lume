@@ -1,0 +1,37 @@
+/* Reuse the same sheet, cards and cover switches as the existing song/settings UI. */
+#plain-lyric-settings .plain-settings-card {padding:8px 18px;margin-bottom:16px}
+#plain-lyric-settings label {display:flex;align-items:center;justify-content:space-between;gap:14px;min-height:54px;font-size:16px;line-height:1.45}
+#plain-lyric-settings output {flex:none;font-variant-numeric:tabular-nums;color:var(--studio-muted)}
+#plain-lyric-settings input[type=range] {appearance:none;display:block;width:100%;height:32px;margin:0 0 10px;padding:0;background:transparent;border:0;touch-action:none;accent-color:var(--studio-accent)}
+#plain-lyric-settings input[type=range]::-webkit-slider-runnable-track {height:4px;border-radius:4px;background:linear-gradient(to right,var(--studio-accent) var(--range-fill),var(--studio-line) var(--range-fill))}
+#plain-lyric-settings input[type=range]::-webkit-slider-thumb {appearance:none;width:20px;height:20px;margin-top:-8px;border-radius:50%;background:var(--studio-surface);border:3px solid var(--studio-accent)}
+#plain-lyric-settings .cover-setting input {right:0}
+#plain-lyric-settings select {flex:none;max-width:100px;min-height:44px;padding:4px 18px 4px 4px;color:var(--studio-muted);background:transparent;border:0;font:inherit}
+#plain-lyric-settings small {color:var(--studio-muted);font-size:12px;line-height:1.5}
+#plain-lyric-settings .plain-source {display:grid;gap:6px;padding-block:14px}
+#plain-lyric-settings .plain-source output {color:var(--studio-ink);font-size:16px}
+html body #full #lyrics-panel {font-size:var(--plain-font-size,23px)!important;text-align:var(--plain-align,start);font-weight:var(--plain-weight,300)}
+html body #full #lyrics-panel p {font-weight:var(--plain-weight,300)}
+html body #lyrics-panel.plain-no-blur p {filter:none}
+/* Playback owns the scroll position; browser anchoring must not counter its motion. */
+#lyrics-panel {overflow-anchor:none;scroll-behavior:auto}
+.lyric-romaji {display:block;font-size:.65em;font-weight:400;opacity:.75;margin-top:.3em}
+.plain-word {background:linear-gradient(to right,var(--ink) var(--word-progress,0%),var(--muted) var(--word-progress,0%));background-clip:text;-webkit-background-clip:text;color:transparent;white-space:pre-wrap}
+
+@media (orientation:portrait) {
+  :root body #full.lyrics-screen {display:flex;flex-direction:column;height:100%;overflow:hidden}
+  :root body #full.lyrics-screen .full-head {position:relative;inset:auto;flex:none;opacity:1;visibility:visible;pointer-events:auto;gap:8px;background:transparent;color:var(--studio-ink)}
+  :root body #full .full-head .full-options {margin-left:auto}
+  :root body #full.lyrics-screen .full-content {display:flex;flex-direction:column;flex:1;min-height:0;width:100%;height:auto;margin:0;padding:0;overflow:hidden}
+  :root body #full.lyrics-screen #lyrics-panel {position:relative;inset:auto;flex:1 1 0;min-height:0;height:0;width:100%;overflow-y:auto;overflow-x:hidden;padding-block:0;overscroll-behavior:contain;contain:paint}
+  :root body #full.lyrics-screen #lyrics-panel::before,:root body #full.lyrics-screen #lyrics-panel::after {content:'';display:block;height:max(0px,calc(var(--plain-view-height,400px) / 2 - 1.5em))}
+  :root body #full.lyrics-screen .full-playback {position:relative;inset:auto;flex:none;display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:auto auto auto auto;gap:8px;padding:8px max(22px,var(--lume-safe-right)) max(12px,var(--lume-safe-bottom)) max(22px,var(--lume-safe-left));background:transparent;color:var(--studio-ink);--ink:var(--studio-ink);--muted:var(--studio-muted);--accent:var(--studio-accent)}
+  :root body #full.lyrics-screen .full-meta {grid-area:1/1}
+  :root body #full.lyrics-screen .seek {grid-area:2/1}
+  :root body #full.lyrics-screen .transport {grid-area:3/1;justify-self:center}
+  :root body #full.lyrics-screen .translation-tools {position:static;inset:auto;grid-area:4/1;justify-self:end;min-height:44px;margin:0}
+  :root body #full.lyrics-screen .translation-tools:has(#translation-choice[hidden]) {display:none}
+  :root body #full.lyrics-screen.plain-hide-controls .full-playback > :not(.translation-tools) {display:none}
+  :root body #full.lyrics-screen.plain-hide-controls .full-playback {padding-top:0;gap:0}
+  :root body #full.lyrics-screen .full-head {--ink:var(--studio-ink);--muted:var(--studio-muted);--accent:var(--studio-accent)}
+}

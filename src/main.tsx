@@ -1,0 +1,12 @@
+import React from 'react';
+import ReactDOM from 'react-dom/client';
+import App from './App';
+import './styles.css';
+import '../mobile/player-assets/player/liquid-material.css';
+import './appearance/liquid-desktop.css';
+import './appearance/liquid-glass.js';
+import './music-sidebar.css';
+import '../mobile/player-assets/player/studio-theme.css';
+import './appearance/studio-desktop.css';
+ReactDOM.createRoot(document.getElementById('root')!).render(<React.StrictMode><App /></React.StrictMode>);
+import './appearance/playback-home.css';

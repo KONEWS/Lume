@@ -1,0 +1,7 @@
+.room-connection-status {display:flex;align-items:center;justify-content:space-between;gap:16px;padding:14px 18px;margin:0 0 18px;border:1px solid var(--studio-keyline);background:var(--studio-selected);border-radius:12px}
+.room-connection-status strong {font-size:14px;color:var(--studio-ink)}
+.room-connection-status p {margin:5px 0 0;font-size:12px;color:var(--studio-muted)}
+.room-connection-status button {flex:none;padding:8px 13px;color:var(--studio-ink);background:var(--studio-control);border:1px solid var(--studio-line);border-radius:8px;cursor:pointer}
+.room-connection-status[data-status=error],.room-connection-status[data-status=disconnected] {border-color:#e3a27c80}
+.room-discovery {padding:20px;margin-bottom:24px;border:1px solid var(--studio-line);border-radius:12px;background:var(--studio-panel);scroll-margin-top:24px}
+.room-discovery h3 {font-size:16px;margin:0 0 8px}.room-discovery .manual-connect {font-size:13px}

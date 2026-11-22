@@ -1,0 +1,8 @@
+.skin-options{display:flex;flex-wrap:wrap;gap:.6rem}
+.skin-options button{padding:.5rem .8rem;border:1px solid currentColor;border-radius:1rem}
+:root[data-custom-skin]{background:var(--skin-background);color:var(--skin-ink);--panel:var(--skin-surface);--accent:var(--skin-accent)}
+[data-custom-skin] .app-shell{background:linear-gradient(145deg,var(--skin-background),color-mix(in srgb,var(--skin-surface) 45%,var(--skin-background)))}
+[data-custom-skin] :is(.glass,.device-card,.sidebar-space,.album-card,.modal,.player-bar,.window-titlebar){background:color-mix(in srgb,var(--skin-surface) 90%,transparent);color:var(--skin-ink)}
+[data-custom-skin] :is(h1,h2,h3,h4,strong,p,small,span,.primary-nav button,.track-main,.button,.icon-button,.text-button,.breadcrumb){color:var(--skin-ink)}
+[data-custom-skin] :is(.button-primary,.play-button,.primary-nav .selected,.mobile-nav .selected,.skin-options button){background:var(--skin-accent);color:var(--skin-background)}
+[data-custom-skin] .button-primary *,[data-custom-skin] .selected span{color:inherit}

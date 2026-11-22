@@ -1,0 +1,4 @@
+Release: v8.1.2-folia.1
+Archive: ffmpeg-8.1.2-folia-x86_64-w64-mingw32.tar.gz
+Archive SHA-256: 6575c45fc4568e9280281e09d6febf3d23a9a950d9c81ea50e46f5e0ed8fd5e9
+Binary SHA-256: e90b8bff6f94851fce5d40f5cfc794c1ec445e2c35036146f0c48c2853722cb4
