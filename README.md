@@ -12,7 +12,7 @@ Windows、网页与手机默认使用蓝夜配色。侧边栏底部的「外观�
 
 ## 安装包
 
-[GitHub 历史安装包归档](https://github.com/KONEWS/Lume/releases/tag/historical-installers-2026-11-22) 收录 `release/` 目录截至 2026-11-22 的 Windows `.exe`、Android `.apk` 和 HarmonyOS `.hap` 安装包。附件名中的 `root__` 代表 `release/` 根目录，其他附件以原相对目录开头；完整原路径、文件大小与 SHA-256 见该 Release 的 `MANIFEST.json`。归档包含各开发阶段的旧包，安装时请核对平台和版本。
+[GitHub 历史安装包归档](https://github.com/KONEWS/Lume/releases/tag/historical-installers-2026-11-22) 收录 `release/` 目录截至 2026-11-22 的全部 288 份 Windows `.exe`、Android `.apk` 和 HarmonyOS `.hap` 安装包。为保证大文件上传可靠，安装包按平台打成 `.tar.zst`，每份归档拆成 32 MiB 分卷。下载所需平台的全部 `.partNNN` 分卷，以及 `ARCHIVES.json`、`MANIFEST.json` 和 `restore-lume-installers.py`；安装 Python 3.11+ 和 Zstandard 命令行工具后，在下载目录运行 `python restore-lume-installers.py Windows`、`Android` 或 `HarmonyOS`。脚本逐一校验 SHA-256，并按原目录还原安装包。归档包含各开发阶段的旧包，安装时请核对平台和版本。
 
 ## 开始使用
 
@@ -96,4 +96,3 @@ npm run package:win
 - `resources/demo/`：内置原创试听音频。
 - `tests/`：服务整合测试。
 - `PLAYER_VISION.md`：完整产品愿景及后续多平台路线。
-
