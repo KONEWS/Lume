@@ -1,0 +1,11 @@
+/* Folia's Flow and Partita line boxes have desktop minimum heights of 300/320px.
+   In a short landscape WebView that exceeds the 70vh lyric area after its
+   32px top and bottom padding, leaving wrapped lines behind player chrome. */
+@media (orientation:landscape) and (max-height:520px) {
+  html[data-mobile-lyrics=true]:not(.settings-open) [data-visualizer-style=classic] [data-overlap-fit-line] {
+    min-height:min(300px,calc(70vh - 64px))!important;
+  }
+  html[data-mobile-lyrics=true]:not(.settings-open) [data-visualizer-style=partita] [data-overlap-fit-line] {
+    min-height:min(320px,calc(70vh - 64px))!important;
+  }
+}

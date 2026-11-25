@@ -1,0 +1,12 @@
+{
+  "string": [
+    {
+      "name": "player_widget",
+      "value": "澄音播放器"
+    },
+    {
+      "name": "player_widget_desc",
+      "value": "显示当前歌曲封面，在桌面上播放、暂停或切歌。"
+    }
+  ]
+}

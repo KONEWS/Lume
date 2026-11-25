@@ -14,12 +14,13 @@ run "$cm/bin/cmake.exe" @('--build',$native)
 New-Item -ItemType Directory -Force "$out/lib/arm64-v8a" | Out-Null
 Copy-Item "$native/liblume.so" "$out/lib/arm64-v8a"
 run "$ndk/toolchains/llvm/prebuilt/windows-x86_64/bin/llvm-strip.exe" @('--strip-unneeded',"$out/lib/arm64-v8a/liblume.so")
-$java=@(Get-ChildItem app/src/main/java -Filter *.java -Recurse | ForEach-Object FullName)
+New-Item -ItemType Directory "$out/generated" -Force | Out-Null
+run "$bt\aapt2.exe" @('compile','--dir','app/src/main/res','-o',"$out\resources.zip")
+run "$bt\aapt2.exe" @('link','--java',"$out/generated","$out\resources.zip",'-A','app/src/main/assets','-0','mp3','-I',$api,'--manifest','app/src/main/AndroidManifest.xml','-o',"$out\base.apk")
+$java=@(Get-ChildItem app/src/main/java -Filter *.java -Recurse | ForEach-Object FullName) + @(Get-ChildItem "$out/generated" -Filter R.java -Recurse | ForEach-Object FullName)
 run javac (@('-encoding','UTF-8','-source','8','-target','8','-bootclasspath',("$api;$bt\core-lambda-stubs.jar"),'-d',"$out\classes")+$java)
 run jar @('cf',"$out\receiver.jar",'-C',"$out\classes",'.')
 run "$bt\d8.bat" @('--min-api','28','--lib',$api,'--output',"$out\dex","$out\receiver.jar")
-run "$bt\aapt2.exe" @('compile','--dir','app/src/main/res','-o',"$out\resources.zip")
-run "$bt\aapt2.exe" @('link',"$out\resources.zip",'-A','app/src/main/assets','-0','mp3','-I',$api,'--manifest','app/src/main/AndroidManifest.xml','-o',"$out\base.apk")
 # jar preserves forward slashes for nested WebView asset paths on Windows.
 Copy-Item -LiteralPath '../player-assets' -Destination "$out\assets" -Recurse
 run python @('../optimize-player-assets.py',"$out/assets/player",'--report',"$out/asset-optimization.json")

@@ -4,9 +4,9 @@ import { randomUUID } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { parseFile } from 'music-metadata';
+import { parseFile } from './audio-facts.mjs';
 
-const limit = 200 * 1024 * 1024;
+import { MAX_AUDIO_BYTES } from '../shared/audio-size.mjs';
 const invalid = message => Object.assign(new Error(message), {status:400});
 const mediaExt = new Set(['mp3','m4a','mp4','wav','flac','ogg','opus','aac','webm']);
 
@@ -58,14 +58,14 @@ export async function phoneLibraries(app, {devices,broadcast,play,discard}) {
   function owned(req){return job && job.token===req.params.token && job.owner===(req.headers.cookie||req.socket.remoteAddress);}
   app.post('/api/source-data/:token/fail',(req,res)=>{
     if(!owned(req))return res.sendStatus(404);
-    cancel('手机无法读取这首歌，请检查文件后重试。');broadcast();res.json({ok:true});
+    cancel(req.query.reason==='size'?'单首音频上限为 500 MiB。':'手机无法读取这首歌，请检查文件后重试。');broadcast();res.json({ok:true});
   });
   app.put('/api/source-data/:token',(req,res,next)=>owned(req)?next():res.sendStatus(404),
     express.raw({type:'application/octet-stream',limit:'512kb'}),async(req,res)=>{
       if(!owned(req))return res.sendStatus(404);
       const task=job, bytes=req.body??Buffer.alloc(0), offset=Number(req.query.offset);
       if(task.busy||offset!==task.size)return res.status(409).json({offset:task.size});
-      if(!Buffer.isBuffer(bytes)||task.size+bytes.length>limit){cancel('单首音频上限为 200 MB。');broadcast();return res.sendStatus(413);}
+      if(!Buffer.isBuffer(bytes)||task.size+bytes.length>MAX_AUDIO_BYTES){cancel('单首音频上限为 500 MiB。');broadcast();return res.sendStatus(413);}
       task.busy=true;task.touched=Date.now();
       let readyFile;
       try{

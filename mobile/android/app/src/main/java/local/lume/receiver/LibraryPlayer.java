@@ -26,29 +26,45 @@ final class LibraryPlayer {
         boolean hidden=false;
         JSONObject facts=new JSONObject();
         Song(String t,String u){title=t;uri=u;}
+        static boolean isLegacyAsset(String uri){
+            return "asset".equals(uri)||"demo".equals(uri)||"demo-moon".equals(uri)||"demo-forest".equals(uri);
+        }
         static String filenameTitle(String name){return name.replaceFirst("(?i)\\.(mp3|flac|wav|wave|m4a|aac|ogg|opus|wma|aiff|ape|alac)$","");}
         JSONObject metadata() throws JSONException {
             return new JSONObject(facts.toString()).put("title",title).put("artist",artist).put("album",album).put("folder",folder).put("hidden",hidden);
         }
+        JSONObject coverRecord() throws JSONException {
+            return metadata().put("id",uri).put("scanStamp",scanStamp)
+                .put("thumbSource",uri+"|"+coverUri+"|"+scanStamp+"|"+facts.optLong("modifiedAt"))
+                .put("hasSideLyrics",!lyricUri.isEmpty()).put("hasSideCover",!coverUri.isEmpty());
+        }
     }
     private final ExecutorService imports=Executors.newSingleThreadExecutor();
     boolean scanning, closed;
-    volatile boolean paused;
-    synchronized void pauseImport(boolean value){
-        if(!scanning)return;
-        paused=value;notifyAll();changed.run();
+    static final class ScanRun {
+        final android.os.CancellationSignal cancel=new android.os.CancellationSignal();
+        java.util.concurrent.Future<?> worker;
+        volatile int scanDone,scanFound,scanTotal;
+        volatile boolean scanTotalKnown;
+        int scanRead,scanUnchanged,shortFiles,excludedFolders,excludedFormats;
+        JSONObject shortCache, directories;
+        final Set<String> seen=new HashSet<>(), completeRoots=new HashSet<>(), missing=new HashSet<>();
+        final Map<String,String> folders=new HashMap<>();
     }
-    private synchronized boolean canImport(){
-        try{while(paused)wait();}
-        catch(InterruptedException e){Thread.currentThread().interrupt();}
-        return !Thread.currentThread().isInterrupted();
+    ScanRun scan=new ScanRun();
+    void stopScan(){
+        if(!scanning)return;
+        ScanRun stopped=scan;
+        scan=new ScanRun();scanning=false;scanStatus="已终止扫描";
+        if(stopped.worker!=null)stopped.worker.cancel(true);
+        stopped.cancel.cancel();
+        changed.run();
     }
     String scanStatus="";
     JSONArray scanHistory=new JSONArray();
     private Set<String> blockedFolders=Collections.emptySet();
     private boolean skipShort;
     private ScanFilter scanFilter=new ScanFilter(Collections.emptyList());
-    private int shortFiles,excludedFolders,excludedFormats;
     private int unavailableRoots;
     static String folderKey(Uri uri,String doc){
         int volume=doc.indexOf(':');
@@ -63,9 +79,7 @@ final class LibraryPlayer {
         return false;
     }
 
-    volatile int scanDone,scanFound,scanTotal;
-    volatile int scanRead,scanUnchanged;
-    private JSONObject scanShortCache=new JSONObject();
+    private JSONObject scanShortCache=new JSONObject(), scanDirectories=new JSONObject();
     int revision;
     JSONObject counts=new JSONObject();
     private static String extension(String name){int i=name.lastIndexOf('.');return i<0?"":name.substring(i+1).toLowerCase(Locale.ROOT);}
@@ -102,10 +116,13 @@ final class LibraryPlayer {
         return result;
     }
     void reloadCounts(){try{counts=MobileHost.call(new JSONObject().put("type","history"));}catch(JSONException ignored){}}
-    private void persistSongs(){
+    private void persistSongs(){persistSongs(false);}
+    private void persistSongs(boolean durable){
         JSONArray list=new JSONArray();
         try{for(Song s:songs)list.put(s.metadata().put("metadataVersion",s.metadataVersion).put("taggedTitle",s.taggedTitle).put("facts",s.facts).put("uri",s.uri).put("lyricUri",s.lyricUri).put("coverUri",s.coverUri).put("scanStamp",s.scanStamp));}catch(JSONException ignored){}
-        app.getSharedPreferences("library",0).edit().putString("songs",list.toString()).putString("scanShortCache",scanShortCache.toString()).apply();
+        android.content.SharedPreferences.Editor edit=app.getSharedPreferences("library",0).edit().putString("songs",list.toString()).putString("scanShortCache",scanShortCache.toString()).putString("directoryIndex",scanDirectories.toString());
+        if(durable){if(!edit.commit())throw new IllegalStateException("本机曲库保存失败");}
+        else edit.apply();
     }
     private void refreshLegacyMetadata(List<Song> candidates){
         if(candidates.isEmpty())return;
@@ -115,7 +132,7 @@ final class LibraryPlayer {
                 if(Thread.currentThread().isInterrupted())return;
                 tags.put(song,readSong(Uri.parse(song.uri),song.title,song.folder,-1,false));
             }
-            app.runOnUiThread(()->{
+            main.post(()->{
                 if(closed||tags.isEmpty())return;
                 for(Map.Entry<Song,Song> entry:tags.entrySet()){
                     if(songs.contains(entry.getKey()))mergeMetadata(entry.getKey(),entry.getValue());
@@ -126,14 +143,16 @@ final class LibraryPlayer {
     }
     final PhoneSource source;
     final ArrayList<Song> songs=new ArrayList<>();
-    private final Activity app;
+    private final android.content.Context app;
+    private final android.os.Handler main = new android.os.Handler(android.os.Looper.getMainLooper());
     private final Runnable changed;
     MediaPlayer audio;int index=0;boolean ready, shuffle;String playMode="sequence";
     String error="";
-    LibraryPlayer(Activity app,Runnable changed){
+    LibraryPlayer(android.content.Context app,Runnable changed){
         this.app=app;this.source=new PhoneSource(app);this.changed=changed;
         playMode=app.getSharedPreferences("library",0).getString("playMode",app.getSharedPreferences("library",0).getBoolean("shuffle",false)?"shuffle":"sequence");shuffle=playMode.equals("shuffle");
         List<Song> legacyTitles=new ArrayList<>();
+        try{scanDirectories=new JSONObject(app.getSharedPreferences("library",0).getString("directoryIndex","{}"));}catch(JSONException ignored){}
         try{scanShortCache=new JSONObject(app.getSharedPreferences("library",0).getString("scanShortCache","{}"));}catch(JSONException ignored){}
         try{JSONArray list=new JSONArray(app.getSharedPreferences("library",0).getString("songs","[]"));
             for(int i=0;i<list.length();i++){JSONObject s=list.getJSONObject(i);Song song=new Song(s.getString("title"),s.getString("uri"));
@@ -141,7 +160,7 @@ final class LibraryPlayer {
                 if(!s.has("taggedTitle")&&!Song.filenameTitle(song.title).equals(song.title)){
                     song.taggedTitle=null;
                 }
-                if(Arrays.asList("asset","demo","demo-moon","demo-forest").contains(song.uri))continue;
+                if(Song.isLegacyAsset(song.uri))continue;
                 if(s.optJSONObject("facts")!=null)song.facts=s.optJSONObject("facts");
                 song.lyricUri=s.optString("lyricUri");song.coverUri=s.optString("coverUri");
                 song.scanStamp=s.optString("scanStamp");
@@ -159,11 +178,11 @@ final class LibraryPlayer {
             if(slash>=0)previousFolders.add(folderKey(uri,doc.substring(0,slash)));
         }catch(RuntimeException ignored){}
         scanHistory=new JSONArray(previousFolders);
-        try{counts=MobileHost.call(new JSONObject().put("type","openHistory").put("path",new File(app.getFilesDir(),"plays.json").getPath()));}catch(Exception ignored){}
+        try{counts=MobileHost.call(new JSONObject().put("type","openHistory").put("name",MobileHost.SYSTEM_MODEL).put("path",new File(app.getFilesDir(),"plays.json").getPath()));MobileHost.MODEL=MobileHost.call(new JSONObject().put("type","deviceIdentity")).optString("originDeviceName",MobileHost.SYSTEM_MODEL);}catch(Exception ignored){}
         source.publish(songs);
     }
-    void pick(){Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT);i.setType("audio/*");i.addCategory(Intent.CATEGORY_OPENABLE);i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_WRITE_URI_PERMISSION|Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
-        i.putExtra(Intent.EXTRA_ALLOW_MULTIPLE,true);app.startActivityForResult(i,81);}
+    void pick(Activity activity){Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT);i.setType("audio/*");i.addCategory(Intent.CATEGORY_OPENABLE);i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_WRITE_URI_PERMISSION|Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
+        i.putExtra(Intent.EXTRA_ALLOW_MULTIPLE,true);activity.startActivityForResult(i,81);}
     private void scanOptions(JSONObject options){
             skipShort=options.optBoolean("skipShort",true);
             blockedFolders=new HashSet<>();
@@ -174,9 +193,9 @@ final class LibraryPlayer {
             if(formatList!=null)for(int i=0;i<formatList.length();i++)formats.add(formatList.optString(i));
             scanFilter=new ScanFilter(formats);
     }
-    void pickFolder(JSONObject options,boolean blockOnly){
+    void pickFolder(Activity activity,JSONObject options,boolean blockOnly){
         if(!blockOnly){scanOptions(options);unavailableRoots=0;}
-        app.startActivityForResult(new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE)
+        activity.startActivityForResult(new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE)
             .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_WRITE_URI_PERMISSION|Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION),blockOnly?83:82);
     }
     private void rememberRoot(Uri uri){
@@ -184,7 +203,7 @@ final class LibraryPlayer {
         roots.add(uri.toString());
         app.getSharedPreferences("library",0).edit().putStringSet("scanRoots",roots).apply();
     }
-    void rescan(JSONObject options){
+    void rescan(Activity activity,JSONObject options){
         if(scanning)return;
         scanOptions(options);unavailableRoots=0;
         Set<String> granted=new HashSet<>();
@@ -196,7 +215,7 @@ final class LibraryPlayer {
         if(roots.isEmpty()&&!granted.isEmpty()){
             roots.addAll(granted);app.getSharedPreferences("library",0).edit().putStringSet("scanRoots",roots).apply();
         }
-        if(roots.isEmpty()){scanStatus="请先选择音乐文件夹，之后可点击开始扫描复扫。";changed.run();pickFolder(options,false);return;}
+        if(roots.isEmpty()){scanStatus="请先选择音乐文件夹，之后可点击开始扫描复扫。";changed.run();pickFolder(activity,options,false);return;}
         List<Uri> uris=new ArrayList<>();
         for(String root:roots){
             if(!granted.contains(root)){unavailableRoots++;continue;}
@@ -225,7 +244,7 @@ final class LibraryPlayer {
         return value.equalsIgnoreCase("<unknown>")?"":value;
     }
     private static boolean needsMetadataRefresh(Song song){
-        return song.metadataVersion<1||song.taggedTitle==null||song.facts.optInt("factsVersion")<2||!song.facts.has("sortMetadata");
+        return song.metadataVersion<1||song.taggedTitle==null||song.facts.optInt("factsVersion")<3||!song.facts.has("sortMetadata");
     }
     private static String scanStamp(String name,long size,long modified){
         // Providers without a reliable timestamp must be re-read, never guessed unchanged.
@@ -306,45 +325,80 @@ final class LibraryPlayer {
         if(song.artist.isEmpty())song.artist=cleanTag(song.facts.optString("albumArtist",albumArtist));
         if(song.album.isEmpty())song.album=cleanTag(song.facts.optString("album"));
         // Both platform and common-parser album values above come from file tags.
-        if(ScanFilter.skipsAudio(filterDuration,durationMs,song.album)){shortFiles++;return null;}
+        if(ScanFilter.skipsAudio(filterDuration,durationMs,song.album))return null;
         return song;
     }
-    private void scanTree(Uri tree,List<Song> found,Set<String> known,int[] skipped,Map<String,String[]> companions,Set<String> history,Map<String,Song> refreshed,Map<String,Song> indexed,Set<String> processed){
+    private void scanTree(ScanRun run,Uri tree,boolean lastRoot,List<Song> found,Set<String> known,int[] skipped,Map<String,String[]> companions,Set<String> history,Map<String,Song> refreshed,Map<String,Song> indexed,Set<String> processed){
         List<String[]> candidates=new ArrayList<>();
-        Map<String,String> sidecars=new HashMap<>();
+        Map<String,String> sidecars=new HashMap<>(), sideStamps=new HashMap<>();
         String root=DocumentsContract.getTreeDocumentId(tree);
         ArrayDeque<String[]> dirs=new ArrayDeque<>();
         dirs.add(new String[]{root,root.substring(Math.max(root.lastIndexOf('/'),root.lastIndexOf(':'))+1)});
+        boolean fullTree=true;
         Set<String> visited=new HashSet<>();
         Set<String> completeDirs=new HashSet<>();
         String[] cols={Document.COLUMN_DOCUMENT_ID,Document.COLUMN_DISPLAY_NAME,Document.COLUMN_MIME_TYPE,Document.COLUMN_SIZE,Document.COLUMN_LAST_MODIFIED};
-        while(!dirs.isEmpty()&&canImport()){
+        while(!dirs.isEmpty()&&!run.cancel.isCanceled()){
             String[] dir=dirs.remove();if(!visited.add(dir[0]))continue;
             String directory=folderKey(tree,dir[0]);
-            if(blocked(directory)){excludedFolders++;continue;}
+            if(blocked(directory)){run.excludedFolders++;fullTree=false;continue;}
             Uri children=DocumentsContract.buildChildDocumentsUriUsingTree(tree,dir[0]);
-            try(Cursor c=app.getContentResolver().query(children,cols,null,null,null)){
-                if(c==null){skipped[0]++;continue;}
+            try(Cursor c=app.getContentResolver().query(children,cols,null,null,null,run.cancel)){
+                if(c==null){skipped[0]++;fullTree=false;continue;}
+                List<String> fingerprint=new ArrayList<>();
+                Set<String> members=new HashSet<>();
+                int first=candidates.size();
+                boolean reusable=true,complete=true;
                 history.add(directory);
                 while(c.moveToNext()){
-                    if(!canImport())return;
+                    if(run.cancel.isCanceled())return;
                     String id=c.getString(0),name=c.getString(1),mime=c.getString(2);
+                    if(id==null||name==null){complete=false;continue;}
+                    String docKey=tree.getAuthority()+"/"+id;
+                    members.add(docKey);run.seen.add(docKey);
                     if(Document.MIME_TYPE_DIR.equals(mime)){dirs.add(new String[]{id,dir[1]+"/"+name});continue;}
                     if(name.matches("(?i).+\\.(lrc|png|jpe?g|webp)")){
-                        sidecars.put(dir[0]+"/"+name.toLowerCase(Locale.ROOT),DocumentsContract.buildDocumentUriUsingTree(tree,id).toString());
+                        String side=DocumentsContract.buildDocumentUriUsingTree(tree,id).toString();
+                        sidecars.put(dir[0]+"/"+name.toLowerCase(Locale.ROOT),side);
+                        String stamp=scanStamp(name,c.isNull(3)?-1:c.getLong(3),c.getLong(4));
+                        sideStamps.put(side,stamp);if(stamp.isEmpty())reusable=false;
+                        fingerprint.add(new JSONArray(Arrays.asList(id,name,stamp)).toString());
                         continue;
                     }
                     if(!(mime!=null&&mime.startsWith("audio/"))&&!name.matches("(?i).+\\.(mp3|m4a|aac|flac|ogg|opus|wav|aif|aiff|wma|alac)"))continue;
-                    if(scanFilter.blocksName(name)){excludedFormats++;continue;}
+                    if(scanFilter.blocksName(name)){run.excludedFormats++;continue;}
                     Uri file=DocumentsContract.buildDocumentUriUsingTree(tree,id);
-                    candidates.add(new String[]{file.toString(),name,dir[1],dir[0]+"/"+stem(name),Long.toString(c.isNull(3)?-1:c.getLong(3)),Long.toString(c.isNull(4)?0:c.getLong(4))});scanFound++;
+                    String audioStamp=scanStamp(name,c.isNull(3)?-1:c.getLong(3),c.getLong(4));
+                    Song existing=indexed.get(docKey);
+                    if(audioStamp.isEmpty() || (existing==null?!(skipShort&&!audioStamp.isEmpty()&&audioStamp.equals(run.shortCache.optString(docKey))):
+                            !audioStamp.equals(existing.scanStamp)||needsMetadataRefresh(existing)))reusable=false;
+                    if(existing!=null&&!dir[1].equals(existing.folder))run.folders.put(docKey,dir[1]);
+                    fingerprint.add(new JSONArray(Arrays.asList(id,name,audioStamp)).toString());
+                    candidates.add(new String[]{file.toString(),name,dir[1],dir[0]+"/"+stem(name),Long.toString(c.isNull(3)?-1:c.getLong(3)),Long.toString(c.isNull(4)?0:c.getLong(4))});run.scanFound++;
+                }
+                if(!complete||c.getExtras().getBoolean(DocumentsContract.EXTRA_LOADING,false)||c.getExtras().containsKey(DocumentsContract.EXTRA_ERROR)){
+                    fullTree=false;skipped[0]++;continue;
                 }
                 completeDirs.add(dir[0]);
-            }catch(RuntimeException e){skipped[0]++;}
+                JSONObject old=run.directories.optJSONObject(directory);
+                Collections.sort(fingerprint);
+                java.security.MessageDigest digest=java.security.MessageDigest.getInstance("SHA-256");
+                String hash=android.util.Base64.encodeToString(digest.digest(new JSONArray(fingerprint).toString().getBytes(java.nio.charset.StandardCharsets.UTF_8)),android.util.Base64.NO_WRAP);
+                JSONArray previous=old==null?null:old.optJSONArray("members");
+                if(previous!=null)for(int j=0;j<previous.length();j++){
+                    String k=previous.optString(j);if(!members.contains(k))run.missing.add(k);
+                }
+                if(reusable && old!=null && hash.equals(old.optString("stamp"))){
+                    int unchanged=candidates.size()-first;
+                    candidates.subList(first,candidates.size()).clear();run.scanUnchanged+=unchanged;run.scanDone+=unchanged;
+                }
+                run.directories.put(directory,new JSONObject().put("members",new JSONArray(members)).put("stamp",hash));
+            }catch(Exception e){skipped[0]++;fullTree=false;}
         }
-        scanTotal+=candidates.size();
+        if(fullTree)run.completeRoots.add(tree.getAuthority()+"/"+root);
+        if(lastRoot){run.scanTotal=run.scanFound;run.scanTotalKnown=true;}
         for(String[] entry:candidates){
-            if(!canImport())return;
+            if(run.cancel.isCanceled())return;
             Uri uri=Uri.parse(entry[0]);
             try{
                 String id=key(uri),stem=entry[3],dir=stem.substring(0,stem.lastIndexOf('/')+1);
@@ -354,19 +408,25 @@ final class LibraryPlayer {
                     for(String ext:new String[]{".jpg",".jpeg",".png",".webp"})if((cover=sidecars.get(base+ext))!=null)break;
                     if(cover!=null)break;
                 }
-                if(completeDirs.contains(dir.substring(0,dir.length()-1)))companions.put(id,new String[]{lyrics,cover});
+                Song saved=indexed.get(id);
+                String coverStamp=sideStamps.get(cover),lyricStamp=sideStamps.get(lyrics);
+                if(completeDirs.contains(dir.substring(0,dir.length()-1)) && (saved==null||
+                    !Objects.equals(saved.coverUri,cover==null?"":cover)||!Objects.equals(saved.lyricUri,lyrics==null?"":lyrics)||
+                    !Objects.equals(saved.facts.optString("coverStamp",""),coverStamp==null?"":coverStamp)||
+                    !Objects.equals(saved.facts.optString("lyricStamp",""),lyricStamp==null?"":lyricStamp)))
+                    companions.put(id,new String[]{lyrics,cover,coverStamp,lyricStamp});
                 long size=Long.parseLong(entry[4]);
                 String stamp=scanStamp(entry[1],size,Long.parseLong(entry[5]));
-                Song saved=indexed.get(id);
                 boolean sideNeedsFacts=saved!=null&&!saved.lyricUri.isEmpty()&&lyrics==null&&!saved.facts.has("embeddedHasLyrics");
-                if(saved!=null&&!stamp.isEmpty()&&stamp.equals(saved.scanStamp)&&!needsMetadataRefresh(saved)&&!sideNeedsFacts){scanUnchanged++;continue;}
-                if(saved==null&&skipShort&&!stamp.isEmpty()&&stamp.equals(scanShortCache.optString(id))){shortFiles++;scanUnchanged++;continue;}
-                scanRead++;
+                if(saved!=null&&!stamp.isEmpty()&&stamp.equals(saved.scanStamp)&&!needsMetadataRefresh(saved)&&!sideNeedsFacts){run.scanUnchanged++;continue;}
+                if(saved==null&&skipShort&&!stamp.isEmpty()&&stamp.equals(run.shortCache.optString(id))){run.shortFiles++;run.scanUnchanged++;continue;}
+                run.scanRead++;
                 Song measured=readSong(uri,entry[1],entry[2],size,saved==null&&skipShort);
-                if(measured==null){if(!stamp.isEmpty())scanShortCache.put(id,stamp);continue;}
-                scanShortCache.remove(id);measured.scanStamp=stamp;
+                if(run.cancel.isCanceled())return;
+                if(measured==null){run.shortFiles++;if(!stamp.isEmpty())run.shortCache.put(id,stamp);continue;}
+                run.shortCache.remove(id);measured.scanStamp=stamp;
                 if(saved==null&&known.add(id))found.add(measured);else refreshed.put(id,measured);
-            }catch(Exception e){skipped[0]++;}finally{scanDone++;}
+            }catch(Exception e){skipped[0]++;}finally{run.scanDone++;}
         }
     }
     void imported(Intent data,boolean tree){
@@ -378,50 +438,70 @@ final class LibraryPlayer {
         scanUris(uris,tree,false,data.getFlags());
     }
     private void scanUris(List<Uri> uris,boolean tree,boolean reusePermission,int permissionFlags){
-        scanRead=scanUnchanged=0;
-        scanDone=scanTotal=scanFound=shortFiles=excludedFolders=excludedFormats=0;scanning=true;scanStatus=tree?"正在扫描文件夹…":"正在导入…";changed.run();
+        final ScanRun run=new ScanRun();
+        try{run.directories=new JSONObject(scanDirectories.toString());}catch(JSONException e){run.directories=new JSONObject();}
+        try{run.shortCache=new JSONObject(scanShortCache.toString());}catch(JSONException e){run.shortCache=new JSONObject();}
+        scan=run;scanning=true;scanStatus=tree?"正在扫描文件夹…":"正在导入…";changed.run();
         Set<String> known=new HashSet<>();
         Map<String,Song> indexed=new HashMap<>();Set<String> processed=new HashSet<>();
         for(Song song:songs){String id=key(Uri.parse(song.uri));known.add(id);indexed.put(id,song);}
-        imports.execute(()->{
+        run.worker=imports.submit(()->{
             Set<String> history=new LinkedHashSet<>();
             Map<String,String[]> companions=new HashMap<>();
             Map<String,Song> refreshed=new HashMap<>();
             List<Song> found=new ArrayList<>();int[] skipped={0};
-            if(!tree)scanTotal=uris.size();
+            if(!tree){run.scanTotal=uris.size();run.scanTotalKnown=true;}
+            int rootIndex=0;
             for(Uri uri:uris)try{
-                if(!canImport())return;
+                rootIndex++;
+                if(run.cancel.isCanceled())return;
                 if(!reusePermission)app.getContentResolver().takePersistableUriPermission(uri,permissionFlags&(Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_WRITE_URI_PERMISSION));
                 if(tree&&!reusePermission)rememberRoot(uri);
-                if(tree){scanTree(uri,found,known,skipped,companions,history,refreshed,indexed,processed);continue;}
+                if(tree){scanTree(run,uri,rootIndex==uris.size(),found,known,skipped,companions,history,refreshed,indexed,processed);continue;}
                 boolean fresh=known.add(key(uri));
                 String name=uri.getLastPathSegment();
-                try(Cursor c=app.getContentResolver().query(uri,new String[]{OpenableColumns.DISPLAY_NAME},null,null,null)){if(c!=null&&c.moveToFirst())name=c.getString(0);}
+                try(Cursor c=app.getContentResolver().query(uri,new String[]{OpenableColumns.DISPLAY_NAME},null,null,null,run.cancel)){if(c!=null&&c.moveToFirst())name=c.getString(0);}
                 Song measured=readSong(uri,name,parent(uri.toString()),-1,false);
                 if(fresh)found.add(measured);else refreshed.put(key(uri),measured);
-            }catch(RuntimeException e){skipped[0]++;}finally{if(!tree)scanDone++;}
-            app.runOnUiThread(()->{
-                if(closed)return;
+            }catch(RuntimeException e){skipped[0]++;}finally{if(!tree)run.scanDone++;}
+            main.post(()->{
+                if(closed||scan!=run||run.cancel.isCanceled())return;
+                int removed=0;
+                if(tree){
+                    for(int i=songs.size()-1;i>=0;i--){
+                        Song song=songs.get(i);Uri uri=Uri.parse(song.uri);String id=key(uri);
+                        if(!indexed.containsKey(id)||!DocumentsContract.isTreeUri(uri)||run.seen.contains(id))continue;
+                        String rootKey=uri.getAuthority()+"/"+DocumentsContract.getTreeDocumentId(uri);
+                        if(run.completeRoots.contains(rootKey)||run.missing.contains(id)){removeEntry(song);removed++;run.shortCache.remove(id);}
+                    }
+                    scanDirectories=run.directories;
+                }
+                scanShortCache=run.shortCache;
                 if(tree)scanHistory=new JSONArray(history);
                 for(Song song:found)try{song.facts.put("addedAt",System.currentTimeMillis());}catch(JSONException ignored){}
                 songs.addAll(found);
                 for(Song s:songs){
                     Song measured=refreshed.get(key(Uri.parse(s.uri)));if(measured!=null)mergeMetadata(s,measured);
+                    String folder=run.folders.get(key(Uri.parse(s.uri)));if(folder!=null)s.folder=folder;
                     String[] sides=companions.get(key(Uri.parse(s.uri)));
                     if(sides==null)continue;
+                    try{s.facts.put("coverStamp",sides[2]);s.facts.put("lyricStamp",sides[3]);}catch(JSONException ignored){}
                     s.lyricUri=sides[0]==null?"":sides[0];s.coverUri=sides[1]==null?"":sides[1];
                     updateLyricsStatus(s);
                 }
-                revision++;persistSongs();
-                source.publish(songs);scanning=false;paused=false;
-                scanStatus="完成，新增 "+found.size()+" 首"+(shortFiles>0?"，跳过短音频 "+shortFiles+" 首":"")+(excludedFormats>0?"，跳过屏蔽格式 "+excludedFormats+" 首":"")+(excludedFolders>0?"，跳过屏蔽目录 "+excludedFolders+" 个":"")+(skipped[0]>0?"，无法读取 "+skipped[0]+" 项":"");
-                if(tree)scanStatus+="；枚举 "+scanFound+" 首，读取 "+scanRead+" 首，未变化 "+scanUnchanged+" 首";
+                if(removed>0||!found.isEmpty()||!refreshed.isEmpty()||!companions.isEmpty()||!run.folders.isEmpty()){
+                    revision++;persistSongs();source.publish(songs);
+                }else if(tree)app.getSharedPreferences("library",0).edit().putString("directoryIndex",scanDirectories.toString()).putString("scanShortCache",scanShortCache.toString()).apply();
+                scanning=false;
+                scanStatus="完成，新增 "+found.size()+" 首"+(run.shortFiles>0?"，跳过短音频 "+run.shortFiles+" 首":"")+(run.excludedFormats>0?"，跳过屏蔽格式 "+run.excludedFormats+" 首":"")+(run.excludedFolders>0?"，跳过屏蔽目录 "+run.excludedFolders+" 个":"")+(skipped[0]>0?"，无法读取 "+skipped[0]+" 项":"");
+                if(removed>0)scanStatus+="，移除失效条目 "+removed+" 首";
+                if(tree)scanStatus+="；枚举 "+run.scanFound+" 首，读取 "+run.scanRead+" 首，未变化 "+run.scanUnchanged+" 首";
                 if(unavailableRoots>0)scanStatus+="；"+unavailableRoots+" 个目录授权已失效，请重新选择文件夹";
                 changed.run();
             });
         });
     }
-    void close(){closed=true;imports.shutdownNow();stop();}
+    void close(){closed=true;scan.cancel.cancel();imports.shutdownNow();stop();}
     final ArrayList<Integer> order=new ArrayList<>();
     void setShuffle(boolean enabled){
         setPlayMode(enabled?"shuffle":"sequence");
@@ -438,14 +518,25 @@ final class LibraryPlayer {
         int target=songs.indexOf(song);order.remove((Integer)target);
         int after=order.indexOf(index);order.add(after<0?0:after+1,target);changed.run();
     }
+    void receivePersonal(File file,String title,String ext){
+        String uri=Uri.fromFile(file).toString();
+        for(Song song:songs)if(song.uri.equals(uri))return;
+        Song song=readSong(Uri.fromFile(file),title+"."+ext,"局域网接收",file.length(),false);
+        if(song==null)throw new IllegalStateException("无法读取接收的歌曲");
+        if(!song.taggedTitle)song.title=title;
+        songs.add(song);
+        try{persistSongs(true);}catch(RuntimeException error){songs.remove(song);throw error;}
+        revision++;source.publish(songs);changed.run();
+    }
     void refreshLibrary(){revision++;persistSongs();source.publish(songs);changed.run();}
     void hideSong(Song song){song.hidden=true;playNext.remove(song.uri);order.remove((Integer)songs.indexOf(song));if(songs.indexOf(song)==index){stop();for(int i=0;i<songs.size();i++)if(!songs.get(i).hidden){index=i;break;}}refreshLibrary();}
     void restoreSongs(){for(Song song:songs)song.hidden=false;refreshLibrary();}
-    void removeSong(Song song){
+    void removeSong(Song song){removeEntry(song);refreshLibrary();}
+    private void removeEntry(Song song){
         int removed=songs.indexOf(song);if(removed<0)return;
         if(index==removed)stop();songs.remove(removed);playNext.remove(song.uri);
         for(int i=order.size()-1;i>=0;i--){int n=order.get(i);if(n==removed)order.remove(i);else if(n>removed)order.set(i,n-1);}
-        if(index>removed)index--;index=Math.max(0,Math.min(index,songs.size()-1));refreshLibrary();
+        if(index>removed)index--;index=Math.max(0,Math.min(index,songs.size()-1));
     }
     void step(int offset){
         if(offset>0)while(!playNext.isEmpty()){String id=playNext.remove(0);for(int i=0;i<songs.size();i++)if(songs.get(i).uri.equals(id)&&!songs.get(i).hidden){play(i);return;}}
@@ -476,8 +567,8 @@ final class LibraryPlayer {
         if(songs.get(Math.floorMod(n,songs.size())).hidden){step(1);return;}
         stop();index=(n+songs.size())%songs.size();Song s=songs.get(index);audio=new MediaPlayer();MediaPlayer p=audio;
         playSession=java.util.UUID.randomUUID().toString();playbackEvent("begin",0);
-        statisticsSeeking=false;p.setOnSeekCompleteListener(v->{if(p==audio){statisticsSeeking=false;playbackEvent("seeked",0);}});
-        try{p.setDataSource(app,Uri.parse(s.uri));
+        statisticsSeeking=false;p.setOnSeekCompleteListener(v->{if(p==audio){statisticsSeeking=false;playbackEvent("seeked",0);changed.run();}});
+        try{p.setWakeMode(app,android.os.PowerManager.PARTIAL_WAKE_LOCK);p.setDataSource(app,Uri.parse(s.uri));
             p.setOnPreparedListener(v->{if(p==audio){ready=true;p.start();
                 playbackEvent("play",0);
                 changed.run();}});

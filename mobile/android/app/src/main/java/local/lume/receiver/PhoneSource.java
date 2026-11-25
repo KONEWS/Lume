@@ -28,6 +28,7 @@ final class PhoneSource {
         }
         catalog=entries;titles=next;
     }
+    LibraryPlayer.Song find(String id){return catalog.get(id);}
     JSONArray songs(){return titles;}
     List<LibraryPlayer.Song> localSongs(){return new ArrayList<>(catalog.values());}
     void requested(JSONObject req,String host,String cookie){
@@ -45,6 +46,7 @@ final class PhoneSource {
             while(true){
                 int used=0;
                 while(used<block.length){int n=stream.read(block,used,block.length-used);if(n<0)break;used+=n;}
+                if(offset+used>500L*1024*1024){write(url+"/fail?reason=size",cookie,new byte[0],0,"POST");return;}
                 boolean end=used<block.length;
                 if(!write(url+"?offset="+offset+"&end="+(end?1:0),cookie,block,used,"PUT"))return;
                 offset+=used;if(end)return;

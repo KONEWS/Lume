@@ -1,10 +1,10 @@
-/* Native app surfaces never expose text selection. Search inputs are the exception. */
+/* Search and device-name fields support selection, including replacement of the prefilled name. */
 :root, :root * {
   -webkit-user-select: none !important;
   user-select: none !important;
   -webkit-touch-callout: none !important;
 }
-:root input[type="search"] {
+:root input[type="search"], #lume-device-name {
   -webkit-user-select: text !important;
   user-select: text !important;
   -webkit-touch-callout: default !important;

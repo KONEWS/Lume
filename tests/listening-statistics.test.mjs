@@ -17,9 +17,9 @@ test('calendar periods use session start for completions, split actual time, emp
   assert.equal(period(totals,'week',0,new Date(2027,0,4)).starts,0);
 });
 test('real desktop playback: start timestamp, pause/resume, partial listening, seek rejection, natural completion and loops persist',async()=>{
-  const root=await mkdtemp(path.join(os.tmpdir(),'lume-statistics-')),demo=path.join(root,'resources/demo');await mkdir(demo,{recursive:true});await mkdir(path.join(root,'dist'));
+  const root=await mkdtemp(path.join(os.tmpdir(),'lume-statistics-')),media=path.join(root,'data/media');await mkdir(media,{recursive:true});await mkdir(path.join(root,'dist'));
   const wav=Buffer.alloc(44+16000);wav.write('RIFF');wav.writeUInt32LE(wav.length-8,4);wav.write('WAVEfmt ',8);wav.writeUInt32LE(16,16);wav.writeUInt16LE(1,20);wav.writeUInt16LE(1,22);wav.writeUInt32LE(8000,24);wav.writeUInt32LE(16000,28);wav.writeUInt16LE(2,32);wav.writeUInt16LE(16,34);wav.write('data',36);wav.writeUInt32LE(16000,40);
-  await writeFile(path.join(demo,'one.wav'),wav);await writeFile(path.join(demo,'manifest.json'),JSON.stringify([{id:'one',file:'one.wav',title:'统计验证',duration:1}]));
+  await writeFile(path.join(media,'one.wav'),wav);await writeFile(path.join(root,'data/library.json'),JSON.stringify({tracks:[{source:'import',id:'one',file:'one.wav',title:'统计验证',duration:1}]}));
   const config={port:0,host:'127.0.0.1',dataDir:path.join(root,'data'),resourcesDir:path.join(root,'resources'),staticDir:path.join(root,'dist')};let server=await startServer(config);
   const act=async body=>(await fetch(server.url+'/api/action',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})).json();const state=async()=>(await fetch(server.url+'/api/state')).json();
   try{

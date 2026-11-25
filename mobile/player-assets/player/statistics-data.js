@@ -9,7 +9,7 @@ globalThis.lumeStats=(()=>{
   function normalize(records=[],songs=[]){
     const catalog=new Map(songs.map(s=>[s.id,s])),seen=new Set();
     return records.filter(r=>r&&r.session&&!seen.has(r.session)&&seen.add(r.session)&&Number.isFinite(r.startedAt)).map(r=>{
-      const s=catalog.get(r.id)||{};return {...s,...r,title:r.title||s.title||'未知曲目',artist:r.artist??s.artist??'',album:r.album??s.album??'',source:r.source||'local',sourceType:r.sourceType||'track',listenedMs:amount(r.listenedMs),duration:amount(r.duration||s.duration),completed:r.completed===true,trackKey:(r.source||'local')+'|'+r.id};
+      const s=catalog.get(r.id)||{};return {...s,...r,playModeSource:r.playModeSource||(['local','room'].includes(r.source)?r.source:'unknown'),title:r.title||s.title||'未知曲目',artist:r.artist??s.artist??'',album:r.album??s.album??'',source:r.source||'local',sourceType:r.sourceType||'track',listenedMs:amount(r.listenedMs),duration:amount(r.duration||s.duration),completed:r.completed===true,trackKey:(r.source||'local')+'|'+r.id};
     }).sort((a,b)=>a.startedAt-b.startedAt);
   }
   function range(kind='all',now=Date.now(),selected='',from='',to=''){
@@ -45,7 +45,7 @@ globalThis.lumeStats=(()=>{
     return [...groups.values()].sort((a,b)=>sort==='title'?b.title.localeCompare(a.title):sort==='artist'?b.artist.localeCompare(a.artist):b[sort]-a[sort]||b.count-a.count||b.ms-a.ms||a.title.localeCompare(b.title));
   }
   function trend(rows,bounds,now=Date.now()){
-    let start=bounds.kind==='all'?(rows.length?new Date(Math.min(...rows.map(r=>r.startedAt))):plus(new Date(now),-6)):new Date(bounds.start);start.setHours(0,0,0,0);
+    let start=bounds.kind==='all'?(rows.length?new Date(rows.reduce((first,r)=>Math.min(first,r.startedAt),Infinity)):plus(new Date(now),-6)):new Date(bounds.start);start.setHours(0,0,0,0);
     const end=new Date(Math.min(+bounds.end,now+1)),monthly=end-start>93*86400000;const map=new Map();
     if(monthly)start.setDate(1);
     // Monthly buckets keep multi-year history readable; the detail table retains each bucket.
@@ -67,7 +67,7 @@ globalThis.lumeStats=(()=>{
     const days=new Set();for(const r of rows)for(const [d,ms] of Object.entries(r.scopedDays))if(ms>0)days.add(d);
     for(const r of rows)if(r.scopeMs>0&&!Object.keys(r.scopedDays).length)days.add(day(new Date(r.startedAt)));
     let streak=0,longest=0,previous='';for(const d of [...days].sort()){streak=previous&&day(plus(date(previous),1))===d?streak+1:1;longest=Math.max(longest,streak);previous=d;}
-    const groups=sessions(rows);return {days:days.size,longest,sessions:groups,averageDay:days.size?summary(rows).ms/days.size:0,averageSession:groups.length?sum(groups,s=>s.ms)/groups.length:0,longestSession:Math.max(0,...groups.map(s=>s.ms))};
+    const groups=sessions(rows);return {days:days.size,longest,sessions:groups,averageDay:days.size?summary(rows).ms/days.size:0,averageSession:groups.length?sum(groups,s=>s.ms)/groups.length:0,longestSession:groups.reduce((longest,s)=>Math.max(longest,s.ms),0)};
   }
   function discovery(all,rows){
     const chosen=new Set(rows.filter(r=>r.startsHere).map(r=>r.session)),seen=new Map(),fresh=new Set(),returning=new Set(),rediscovered=new Set();
@@ -78,9 +78,9 @@ globalThis.lumeStats=(()=>{
   }
   function distribution(rows,field){const map=new Map();for(const r of rows){const k=r[field]||'unknown';map.set(k,(map.get(k)||0)+r.scopeMs);}return [...map].sort((a,b)=>b[1]-a[1]);}
   function hours(rows){const values=Array(24).fill(0);for(const r of rows)for(const [h,ms] of Object.entries(r.scopedHours))values[Number(h.slice(11,13))]+=amount(ms);return values;}
-  function milestones(all,now){
-    const rows=scope(all,range('all',now)),s=summary(rows),a=activity(rows),ranks=rank(rows),completed=rows.filter(r=>r.completed),h=hours(rows),earlier=new Map();let laterFinished=0;
-    for(const r of all){if(r.completed&&earlier.get(r.trackKey)===false){laterFinished++;earlier.set(r.trackKey,true);}else if(!earlier.has(r.trackKey))earlier.set(r.trackKey,r.completed);}
+  function milestones(all,now,rows=scope(all,range('all',now))){
+    const s=summary(rows),a=activity(rows),ranks=rank(rows),completed=rows.filter(r=>r.scopeComplete),h=hours(rows),earlier=new Map();let laterFinished=0;
+    for(const r of rows){if(!r.startsHere)continue;if(r.completed&&earlier.get(r.trackKey)===false){laterFinished++;earlier.set(r.trackKey,true);}else if(!earlier.has(r.trackKey))earlier.set(r.trackKey,r.completed);}
     return [
       ['总聆听时间',s.ms,100*3600000,'time'],['完整播放次数',s.count,250,'次'],['听完的不同歌曲',new Set(completed.map(r=>r.trackKey)).size,100,'首'],['最长连续聆听',a.longest,7,'天'],
       ['深夜聆听时间',h.reduce((n,ms,hour)=>n+((hour>=22||hour<6)?ms:0),0),5*3600000,'time'],['最长一次聆听',a.longestSession,3600000,'time'],['重新发现的歌曲',discovery(all,rows).rediscovered,10,'首'],

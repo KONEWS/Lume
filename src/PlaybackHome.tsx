@@ -100,8 +100,8 @@ function CoverShelf({tracks,play,empty}:{tracks:Track[];play:(t:Track)=>void;emp
   </button>)}</div>:<p className="shelf-empty">{empty}</p>;
 }
 
-export function PlaybackHome({state,currentTrack,clock,analyser,audioEnabled,play,toggle,queue,lyrics,importMusic,visit,playCollection}:{
-  state:RoomState;currentTrack:Track|null;clock:PlaybackClock;analyser:RefObject<AnalyserNode|null>;audioEnabled:boolean;play:(t:Track)=>void;toggle:()=>void;
+export function PlaybackHome({animate,state,currentTrack,clock,analyser,audioEnabled,play,toggle,queue,lyrics,importMusic,visit,playCollection}:{
+  animate:boolean;state:RoomState;currentTrack:Track|null;clock:PlaybackClock;analyser:RefObject<AnalyserNode|null>;audioEnabled:boolean;play:(t:Track)=>void;toggle:()=>void;
   queue:()=>void;lyrics:()=>void;importMusic:()=>void;visit:(page:Section)=>void;playCollection:(tracks:Track[])=>void;
 }){
   const {tracks,playback}=state, featured=currentTrack??tracks[0];
@@ -120,25 +120,29 @@ export function PlaybackHome({state,currentTrack,clock,analyser,audioEnabled,pla
   const picks=data.suggestions.filter(t=>t.id!==featured?.id);
   const recommendations=Array.from({length:Math.min(4,picks.length)},(_,i)=>picks[(pickOffset+i)%picks.length]);
   const facts=featured?[featured.format.toUpperCase(), featured.bitDepth&&featured.bitDepth+' bit',featured.sampleRate&&featured.sampleRate/1000+' kHz',featured.channels&&featured.channels+' ch'].filter(Boolean).join('  ·  '):'';
-  return <div className="playback-home page-enter">
+  return <div className={'playback-home listening-surface'+(animate?' page-enter':'')}>
     <section className="dashboard-hero">
       <div className="dashboard-art">{featured?<img src={featured.artwork||fallbackArt} alt={featured.title+' 封面'}/>:<Disc3 size={64}/>}</div>
-      <div className="dashboard-track"><h1>{featured?.title||'导入第一首歌'}</h1>
+      <div className="dashboard-track">
+        <small className="track-status">{currentTrack ? playback.playing ? '正在播放' : '当前曲目' : '我的曲库'}</small>
+        <h1 title={featured?.title}>{featured?.title||'导入第一首歌'}</h1>
         <p className="dashboard-byline"><b>{featured?.artist}</b>{featured?.album&&' · '+featured.album}</p>
-        <small className="dashboard-source">{featured?({demo:'来自内置试听',phone:'来自手机曲库',import:'来自本地曲库'})[featured.source]:'选择本地音频，或将文件拖入窗口。'}</small>
+        <small className="dashboard-source">{featured?({phone:'来自手机曲库',import:'来自本地曲库'})[featured.source]:'选择本地音频，或将文件拖入窗口。'}</small>
+        {facts&&<p className="dashboard-facts">{facts}</p>}
         <div className="dashboard-actions">
-          <button className="dashboard-primary" onClick={()=>currentTrack?toggle():featured?play(featured):importMusic()}>{featured?playback.playing?<Pause size={16}/>:<Play size={16} fill="currentColor"/>:<Plus size={16}/>}{featured?playback.playing?'暂停播放':playback.position>0?'继续播放':'开始播放':'导入音乐'}</button>
+          <button className="dashboard-primary" onClick={()=>currentTrack?toggle():featured?play(featured):importMusic()}>{featured?playback.playing?<Pause size={16}/>:<Play size={16} fill="currentColor"/>:<Plus size={16}/>}{featured?playback.playing?'暂停':'播放':'导入音乐'}</button>
           <button onClick={queue}><ListMusic size={17}/>查看队列</button>
           <button disabled={tracks.length<2} onClick={()=>playCollection(shuffled(tracks))}><Shuffle size={16}/>随机播放</button>
         </div>
-        {facts&&<p className="dashboard-facts">{facts}</p>}
-        {currentTrack&&<LyricExcerpt key={JSON.stringify([state.guestRoom?.url,currentTrack.id,currentTrack.detailKey])} id={currentTrack.id} clock={clock} open={lyrics}/>}
-        <Spectrum analyser={analyser} playing={playback.playing&&audioEnabled}/>
       </div>
+      {currentTrack&&<div className="dashboard-monitor">
+        <LyricExcerpt key={JSON.stringify([state.guestRoom?.url,currentTrack.id,currentTrack.detailKey])} id={currentTrack.id} clock={clock} open={lyrics}/>
+        <Spectrum analyser={analyser} playing={playback.playing&&audioEnabled}/>
+      </div>}
     </section>
     <div className="category-strip">{categories.map(({id,label,icon:Icon},i)=><button key={id} onClick={()=>visit(id)}><Icon size={28} strokeWidth={1.45}/><span><strong>{data.counts[i]}</strong><small>{label}</small></span></button>)}</div>
     <div className="dashboard-columns">
-      <section><header className="shelf-heading"><h2>最近活动</h2><div className="activity-tabs">{(['played','added'] as const).map(key=><button key={key} aria-pressed={tab===key} onClick={()=>setTab(key)}>{key==='added'?'最近添加':'已播放'}</button>)}</div></header>
+      <section className="recent-shelf"><header className="shelf-heading"><h2>最近活动</h2><div className="activity-tabs">{(['played','added'] as const).map(key=><button key={key} aria-pressed={tab===key} onClick={()=>setTab(key)}>{key==='added'?'最近添加':'已播放'}</button>)}</div></header>
         <CoverShelf tracks={(tab==='added'?data.added:data.played).slice(0,4)} play={play} empty={tab==='played'?'播放一首歌后，会在这里留下记录。':'曲库中暂无歌曲。'}/></section>
       <ListeningWeek days={state.listeningDays} now={state.serverTime}/>
       <section><header className="shelf-heading"><h2>为你推荐</h2>{picks.length>1&&<button className="shelf-link" onClick={()=>setPickOffset(n=>n+Math.min(4,picks.length-1))}><RefreshCw size={14}/>换一组</button>}</header>

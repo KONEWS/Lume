@@ -3,6 +3,25 @@ window.lumeCover = (() => {
   const key = 'lume-phone-round-cover';
   let enabled = readPreference(key, false) === true;
   const album = document.getElementById('album');
+  const mini = document.getElementById('mini-art');
+  const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
+  let runningSince = null, elapsed = 0, trackId = '', travelling = null;
+  function paintRotation() {
+    const ms = elapsed + (runningSince === null ? 0 : performance.now() - runningSince);
+    const angle = (reducedMotion.matches ? 0 : (ms % 24000) * 360 / 24000) + 'deg';
+    mini.style.setProperty('--cover-angle', angle);
+    if (enabled) album.style.setProperty('--cover-angle', angle);
+    if (travelling?.isConnected) travelling.style.setProperty('--cover-angle', angle);
+    else travelling = null;
+  }
+  function playback(id, playing) {
+    const now = performance.now();
+    if (trackId !== id) elapsed = 0;
+    else if (runningSince !== null) elapsed += now - runningSince;
+    trackId = id;
+    runningSince = playing ? now : null;
+    paintRotation();
+  }
   const crops = new Map();
   let imageKey = '', generation = 0;
 
@@ -50,11 +69,15 @@ window.lumeCover = (() => {
     const request=++generation;
     album.style.removeProperty('--round-cover-size');
     album.style.removeProperty('--round-cover-position');
+    mini.style.removeProperty('--round-cover-size');
+    mini.style.removeProperty('--round-cover-position');
     const paint=crop=>{
       if(request!==generation || album.style.backgroundImage!==background) return;
       if(crop){
         album.style.setProperty('--round-cover-size',crop.size);
         album.style.setProperty('--round-cover-position',crop.position);
+        mini.style.setProperty('--round-cover-size',crop.size);
+        mini.style.setProperty('--round-cover-position',crop.position);
       }
     };
     if(crops.has(background)){paint(crops.get(background));return;}
@@ -73,6 +96,7 @@ window.lumeCover = (() => {
   new MutationObserver(refreshArtwork).observe(album,{attributes:true,attributeFilter:['style']});
   function apply() {
     document.documentElement.toggleAttribute('data-round-cover', enabled);
+    paintRotation();
     refreshArtwork();
   }
   function setting() {
@@ -91,22 +115,26 @@ window.lumeCover = (() => {
     return row;
   }
   function transition(cover, animate) {
-    if (!enabled) return;
     const art = element('span', undefined, 'travelling-cover-image');
-    cover.classList.add('round-cover-motion');
     cover.append(art);
+    travelling = art;
+    paintRotation();
+    if (!enabled) {
+      // Fade the rotating thumbnail into the upright square artwork.
+      art.style.borderRadius = '50%';
+      animate(art, [{opacity:1},{opacity:0}]);
+      return;
+    }
+    cover.classList.add('round-cover-motion');
     // Match the animated outer radius, so the mini-player endpoint stays square.
     const startRadius=getComputedStyle(document.getElementById('mini-art')).borderTopLeftRadius;
     const startSide=document.getElementById('mini-art').getBoundingClientRect().width;
     const radius=startRadius.endsWith('%')?startRadius:`${100*parseFloat(startRadius)/startSide}%`;
     animate(cover,[{clipPath:`inset(0 round ${radius})`},{clipPath:'inset(0 round 50%)'}]);
-    // data-morphing freezes the live image so both endpoints share its angle.
     const crop=crops.get(album.style.backgroundImage);
     const sameImage=cover.style.backgroundImage===album.style.backgroundImage;
-    animate(art, [{transform:'rotate(0deg)',backgroundSize:crop&&sameImage?crop.originalSize:'cover',backgroundPosition:'50% 50%'},
-      {transform:getComputedStyle(album, '::before').transform,
-       backgroundSize:crop&&sameImage?crop.size:'cover',backgroundPosition:crop&&sameImage?crop.position:'50% 50%'}]);
+    if(crop && sameImage) Object.assign(art.style,{backgroundSize:crop.size,backgroundPosition:crop.position});
   }
   apply();
-  return {setting, transition};
+  return {setting, transition, playback, paintRotation};
 })();

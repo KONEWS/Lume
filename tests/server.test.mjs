@@ -25,18 +25,18 @@ function wav(seconds = 2) {
 async function fixture(options = {}) {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'lume-tests-'));
   const resourcesDir = path.join(directory, 'resources');
-  const demoDir = path.join(resourcesDir, 'demo');
+  const mediaDir = path.join(directory, 'data', 'media');
   const staticDir = path.join(directory, 'dist');
   const dataDir = path.join(directory, 'data');
-  await fs.mkdir(demoDir, { recursive: true });
+  await fs.mkdir(mediaDir, { recursive: true });
   await fs.mkdir(staticDir, { recursive: true });
   await fs.writeFile(path.join(staticDir, 'index.html'), '<html>LUME test</html>');
-  await fs.writeFile(path.join(demoDir, 'first.wav'), wav());
-  await fs.writeFile(path.join(demoDir, 'second.wav'), wav());
-  await fs.writeFile(path.join(demoDir, 'manifest.json'), JSON.stringify([
-    { id: 'first', title: '测试一', artist: 'LUME', album: '测试', duration: 2, format: 'WAV', file: 'first.wav', artwork: '/covers/1.svg' },
-    { id: 'second', title: '测试二', artist: 'LUME', album: '测试', duration: 2, format: 'WAV', file: 'second.wav', artwork: '/covers/2.svg' },
-  ]));
+  await fs.writeFile(path.join(mediaDir, 'first.wav'), wav());
+  await fs.writeFile(path.join(mediaDir, 'second.wav'), wav());
+  await fs.writeFile(path.join(dataDir, 'library.json'), JSON.stringify({tracks:[
+    { source:'import', id: 'first', title: '测试一', artist: 'LUME', album: '测试', duration: 2, format: 'WAV', file: 'first.wav', artwork: '/covers/1.svg' },
+    { source:'import', id: 'second', title: '测试二', artist: 'LUME', album: '测试', duration: 2, format: 'WAV', file: 'second.wav', artwork: '/covers/2.svg' },
+  ]}));
   const config = { port: 0, host: '127.0.0.1', resourcesDir, staticDir, dataDir, ...options };
   let instance = await startServer(config);
   return {
@@ -61,6 +61,38 @@ async function request(f, route, body, headers = {}) {
     ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
   return { response, data: response.headers.get('content-type')?.includes('application/json') ? await response.json() : await response.text() };
 }
+
+test('upgrades a demo library without deleting same-name imports or moving the old playhead to them', async () => {
+  const f = await fixture();
+  try {
+    await f.server.close();
+    const data = path.join(f.directory, 'data');
+    const legacy = [
+      ['demo-tide', '潮汐之间', 'tide.wav'],
+      ['demo-moon', '月色落在水面', 'moon.wav'],
+      ['demo-forest', '林间的呼吸', 'forest.wav'],
+    ].map(([id,title,file]) => ({id,title,file,source:'demo',duration:60}));
+    const originals = legacy.map(track => ({...track,id:'user-'+track.id,source:'import',favorite:true}));
+    for(const track of originals)await fs.writeFile(path.join(data,'media',track.file),wav());
+    const ids = [...legacy,...originals].map(track => track.id);
+    await fs.writeFile(path.join(data,'library.json'),JSON.stringify({
+      tracks:[...legacy,...originals],queue:ids,nextUp:ids,playlists:[{id:'saved',name:'收藏',trackIds:ids}],
+      playback:{trackId:legacy[0].id,position:42},hiddenDemoIds:[legacy[1].id]
+    }));
+    await f.restart();
+    for(let launch=0;launch<2;launch++){
+      const {data:state} = await request(f,'/api/state');
+      const kept=originals.map(track=>track.id);
+      assert.deepEqual(state.tracks.map(track=>track.id),kept);
+      assert(state.tracks.every(track=>track.favorite));
+      assert.deepEqual(state.queue,kept);
+      assert.deepEqual(state.playlists[0].trackIds,kept);
+      assert.equal(state.playback.position,0);
+      for(const track of originals)assert.deepEqual(Buffer.from(await (await fetch(f.url+'/media/'+track.id)).arrayBuffer()),wav());
+      await f.restart();
+    }
+  } finally { await f.dispose(); }
+});
 async function act(f, body) {
   const { response, data } = await request(f, '/api/action', body);
   assert.equal(response.status, 200, JSON.stringify(data));
@@ -235,7 +267,7 @@ test('paired native receivers get independent audio, synchronized controls and r
     const sample = await fs.readFile(new URL('./fixtures/channel-check.wav', import.meta.url));
     form.append('files', new Blob([sample]), 'channel-check.wav');
     const upload = await fetch(f.url+'/api/upload', { method: 'POST', headers: desktop, body: form });
-    const track = (await upload.json()).state.tracks.find(item => item.source === 'import');
+    const track = (await upload.json()).state.tracks.find(item => item.title === 'channel-check');
     await actAsDesktop({ type:'play', trackId:track.id });
     await actAsDesktop({ type:'pause' });
     await actAsDesktop({ type:'seek', position:1.25 });
@@ -295,7 +327,7 @@ test('paired native receivers get independent audio, synchronized controls and r
   }
 });
 
-test('serves demo tracks, byte ranges, safe API errors and rejects foreign origins/hosts', async () => {
+test('serves local tracks, byte ranges, safe API errors and rejects foreign origins/hosts', async () => {
   const f = await fixture();
   try {
     const { response, data } = await request(f, '/api/state');
@@ -365,7 +397,7 @@ test('imports real audio, rejects disguised data, and persists preferences and i
     const result = await response.json();
     assert.equal(result.imported, 1);
     assert.equal(result.rejected.length, 1);
-    const track = result.state.tracks.find((item) => item.source === 'import');
+    const track = result.state.tracks.find(item => item.title === 'My track');
     assert.equal(track.title, 'My track');
     assert.equal(track.duration, 1);
     assert.deepEqual(result.state.queue, [track.id]);
@@ -405,7 +437,7 @@ test('folder scans skip repeat audio and playlists survive a restart', async () 
     const results = await Promise.all([scan(), scan()]);
     assert.equal(results[0].imported + results[1].imported, 1);
     assert.equal(results[0].skipped + results[1].skipped, 1);
-    const track = results.find(r => r.imported).state.tracks.find(t => t.source === 'import');
+    const track = results.find(r => r.imported).state.tracks.find(t => t.folder === '音乐/晨间');
     assert.equal(track.folder, '音乐/晨间');
     const state = await act(f, { type: 'playlist-save', value: '晨间', trackIds: [track.id, 'first'] });
     const id = state.playlists[0].id;
@@ -424,7 +456,7 @@ test('library charts use measured audio facts and playback counts only complete 
     form.append('folders',JSON.stringify(['曲库']));
     form.append('lyrics','1');
     const result=await (await fetch(f.url+'/api/upload',{method:'POST',body:form})).json();
-    const track=result.state.tracks.find(t=>t.source==='import');
+    const track=result.state.tracks.find(t=>t.title==='晨光');
     assert.equal(track.hasLyrics,true);assert.equal(track.bytes,content.length);assert.equal(track.quality,'lossless');
     assert.equal(result.state.tracks.find(t=>t.id==='first').hasLyrics,false);
     await act(f,{type:'queue-set',trackIds:[track.id,'first'],value:true});
@@ -525,7 +557,7 @@ test('local batch imports preserve order, cover and LRC across playback actions 
     const state=(await request(f,'/api/state')).data;
     assert.equal(state.playback.trackId,'first');
     assert.equal(state.playback.playing,false);
-    const songs=state.tracks.filter(t=>t.source==='import');
+    const songs=state.tracks.filter(t=>!['first','second'].includes(t.id));
     assert.deepEqual(songs.map(t=>t.title),['第一首','第二首']);
     assert.deepEqual(songs.map(t=>t.hasLyrics),[false,true]);
     assert.equal((await request(f,'/api/lyrics/'+songs[1].id)).data.lyrics,lyrics);

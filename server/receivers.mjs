@@ -5,6 +5,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import {MediaIdentities} from './local-media.mjs';
+import {coverMime} from '../shared/song-details.mjs';
 
 const execute = promisify(execFile);
 const filters = { left: 'c0', right: 'c1', mono: '0.5*c0+0.5*c1' };
@@ -14,7 +15,7 @@ export function splitFilter(channel) {
 }
 
 // The receiver gets a seekable native media URL. Cache only trusted, server-selected files.
-export async function mountReceivers(app, { devices, broadcast, current, sourcePath, trims, sources, pending }) {
+export async function mountReceivers(app, { devices, broadcast, current, sourcePath, trims, sources, pending, coverRevision, coverPath }) {
   const identities=new MediaIdentities();
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'lume-channels-'));
   const entries = new Map();
@@ -44,27 +45,63 @@ export async function mountReceivers(app, { devices, broadcast, current, sourceP
     entry.at=Date.now();
     return entry.promise;
   }
+  const lastSession=new WeakMap();
+  const thumbs=new Map();
+  let renderingThumbs=0;
+  app.get('/api/catalog-cover/:revision/:id',async(req,res)=>{
+    const track=current().catalog.find(song=>song.id===req.params.id);
+    if(!track||coverRevision(track)!==req.params.revision)return res.sendStatus(404);
+    const key=req.params.revision;
+    res.set('Cache-Control','no-store');
+    if(!thumbs.has(key)){
+      if(renderingThumbs>=2)return res.json({pending:true});
+      renderingThumbs++;
+      const load=(async()=>{
+        const file=await coverPath(track);
+        if(!file)return '';
+        if((await fs.stat(file)).size<=64*1024){
+          const bytes=await fs.readFile(file),mime=coverMime(bytes);
+          if(mime)return 'data:'+mime+';base64,'+bytes.toString('base64');
+        }
+        const {stdout}=await execute('ffmpeg',['-nostdin','-v','error','-protocol_whitelist','file,pipe','-i',file,'-frames:v','1',
+          '-vf',"scale='min(128,iw)':'min(128,ih)':force_original_aspect_ratio=decrease",'-c:v','png','-f','image2pipe','pipe:1'],
+          {encoding:'buffer',maxBuffer:256*1024,timeout:8000,windowsHide:true});
+        return 'data:image/png;base64,'+stdout.toString('base64');
+      })().finally(()=>renderingThumbs--);
+      if(thumbs.size>=128)thumbs.delete(thumbs.keys().next().value);
+      thumbs.set(key,load);
+    }
+    try{res.json({cover:await thumbs.get(key)});}catch{thumbs.delete(key);res.sendStatus(503);}
+  });
   app.post('/api/receiver', (req,res)=>{
     const {id,platform}=req.body ?? {};
-    if (!/^native-[a-zA-Z0-9-]{8,64}$/.test(id)||!['Android','HarmonyOS'].includes(platform)) return res.status(400).json({error:'无效的设备'});
+    if (!/^native-[a-zA-Z0-9-]{8,64}$/.test(id)||!['Android','HarmonyOS','Windows'].includes(platform)) return res.status(400).json({error:'无效的设备'});
     const owner=req.headers.cookie || req.socket.remoteAddress;
     if (owners.has(id) && owners.get(id)!==owner) return res.status(403).json({error:'设备会话已变更'});
     let device=devices.get(id);
     if (device && !owners.has(id)) return res.sendStatus(409);
     if (!device) {
       const profile=/^[a-fA-F0-9-]{32,36}$/.test(req.body.profile ?? '')?platform+'-'+req.body.profile:null;
-      device={id,profile,delayMs:trims.get(profile)??0,name:deviceName(platform,req.body.model),platform,channel:platform==='Android'?'right':'left',enabled:true,volume:1,muted:false,lastSeen:Date.now()};
+      const saved=req.body.savedDelayMs;
+      device={id,profile,delayMs:trims.get(profile)??(Number.isInteger(saved)&&Math.abs(saved)<=1000?saved:0),name:deviceName(platform,req.body.model),platform,channel:platform==='Android'?'right':'left',enabled:true,volume:1,muted:false,lastSeen:Date.now()};
       devices.set(id,device);owners.set(id,owner);broadcast();
     }
+    if(req.body.model&&device.name!==deviceName(platform,req.body.model)){device.name=deviceName(platform,req.body.model);broadcast();}
     if(req.body.leave===true){sources.remove(id);devices.delete(id);owners.delete(id);broadcast();return res.json({left:true});}
+    device.hostAddress=req.socket.localAddress?.replace(/^::ffff:/,"");
     device.lastSeen=Date.now();
     for(const metric of ['bufferMs','gaps','underflows'])if(Number.isInteger(req.body[metric])&&req.body[metric]>=0)device[metric]=req.body[metric];
-    const {track,playback,position,skin,catalog,libraryVersion,playRecords,listeningDays}=current();
+    const {track,playback,position,skin,catalog,libraryVersion,currentSession,playRecords,listeningDays}=current();
+    const previous=lastSession.get(device);lastSession.set(device,currentSession);
+    const roomRecords=playRecords.filter(r=>r.session===currentSession||r.session===previous);
     res.set('Cache-Control','no-store').json({...sources.poll(device,owner,req.body.sourceSongs),
       ...(track?identities.peek(sourcePath(track)):{}),
-      selfId:id,outputs:[...devices.values()].map(({id,name,platform,channel,enabled,muted,volume,delayMs=0})=>({id,name,platform,channel,enabled,muted,volume,delayMs})),
-      pending:pending(),skin,playRecords,listeningDays,delayMs:device.delayMs,trackId:track?.id??'',duration:track?.duration??0,roomPlaying:playback.playing,shuffle:playback.shuffle,libraryVersion,
-      ...(req.body.libraryVersion!==libraryVersion?{catalog:catalog.map(({id,title,artist,album,folder,quality,bytes,hasLyrics,playCount})=>({id,title,artist,album,folder,quality,bytes,hasLyrics,playCount}))}:{}),roomTrack:track?.title??'',playing:playback.playing&&device.enabled,
+      hostAddress:device.hostAddress,selfId:id,outputs:[...devices.values()].map(({id,name,platform,channel,enabled,muted,volume,delayMs=0})=>({id,name,platform,channel,enabled,muted,volume,delayMs})),
+      pending:pending(),skin,currentSession,playRecords:roomRecords,delayMs:device.delayMs,trackId:track?.id??'',duration:track?.duration??0,roomPlaying:playback.playing,shuffle:playback.shuffle,libraryVersion,
+      ...(req.body.libraryVersion!==libraryVersion?{catalog:catalog.map(song=>{
+        const {id,title,artist,album,folder,quality,bytes,hasLyrics,playCount}=song;
+        return {id,title,artist,album,folder,quality,bytes,hasLyrics,playCount,coverRevision:coverRevision(song)};
+      })}:{}),roomTrack:track?.title??'',playing:playback.playing&&device.enabled,
       position,volume:device.muted||playback.muted?0:device.volume*playback.volume,channel:device.channel,
       enabled:device.enabled,media:track?'/api/receiver-media/'+track.id+'/'+device.channel:'',serverTime:Date.now()});
   });

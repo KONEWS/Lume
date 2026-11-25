@@ -1,6 +1,6 @@
 package local.lume.receiver;
 
-import android.app.Activity;
+import android.content.Context;
 import android.net.Uri;
 import android.os.ParcelFileDescriptor;
 import org.json.*;
@@ -11,9 +11,10 @@ import java.nio.charset.StandardCharsets;
 final class MobileHost {
     static {System.loadLibrary("lume");}
     private static native byte[] nativeRoom(byte[] request);
-    private final Activity app;
+    private final Context app;
     private final Map<String,ParcelFileDescriptor> files=new HashMap<>();
-    static final String MODEL = deviceModel();
+    static final String SYSTEM_MODEL = deviceModel();
+    static volatile String MODEL = SYSTEM_MODEL;
     private static String deviceModel(){
         String model=android.os.Build.MODEL, brand=android.os.Build.BRAND;
         if(model==null || model.trim().isEmpty() || "unknown".equalsIgnoreCase(model))return "安卓手机";
@@ -23,7 +24,7 @@ final class MobileHost {
         return brand.trim()+" "+model;
     }
     volatile boolean active;
-    MobileHost(Activity app){this.app=app;}
+    MobileHost(Context app){this.app=app;}
     static JSONObject call(JSONObject request)throws JSONException{
         return new JSONObject(new String(nativeRoom(request.toString().getBytes(StandardCharsets.UTF_8)),StandardCharsets.UTF_8));
     }
@@ -53,6 +54,10 @@ final class MobileHost {
                     broadcasts.put(Integer.toUnsignedLong(broadcast));
                 }
                 if(broadcasts.length()>0)request.put("wifiNetwork",wifi.getNetworkHandle()).put("wifiBroadcasts",broadcasts);
+                JSONArray gateways=new JSONArray();
+                for(android.net.RouteInfo route:links.getRoutes())if(route.isDefaultRoute()&&route.getGateway() instanceof java.net.Inet4Address)
+                    gateways.put(Integer.toUnsignedLong(java.nio.ByteBuffer.wrap(route.getGateway().getAddress()).getInt()));
+                request.put("wifiGateways",gateways);
             }
         }catch(SecurityException ignored){}
         call(request);

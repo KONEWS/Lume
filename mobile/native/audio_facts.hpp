@@ -18,6 +18,9 @@
 namespace audio_facts {
 using Json = nlohmann::json;
 using Bytes = std::vector<unsigned char>;
+inline const char* losslessQuality(uint32_t sampleRate, unsigned bitDepth) {
+    return sampleRate >= 48000 && bitDepth >= 24 ? "hires" : "lossless";
+}
 inline uint32_t number(const unsigned char* p, bool little=false) {
     if(little) return uint32_t(p[0]) | uint32_t(p[1])<<8 | uint32_t(p[2])<<16 | uint32_t(p[3])<<24;
     return uint32_t(p[0])<<24 | uint32_t(p[1])<<16 | uint32_t(p[2])<<8 | p[3];
@@ -159,7 +162,28 @@ inline void mp4(Source& f,uint64_t pos,uint64_t end,Json& out,int depth=0){
         }
         if(type==std::string("\xa9" "lyr",4) && n>header+16)out["hasLyrics"]=true;
         else if(type=="stsd" && limit-start>=16 && read(f,start+12,h,4)){
-            if(textAt(h,0,"alac"))out["quality"]="lossless";
+            if(textAt(h,0,"alac")){
+                out["quality"]="lossless";
+                // An ALAC sample entry contains its original rate and depth in the codec configuration.
+                Bytes entry;
+                const uint64_t sample=start+8;
+                if(limit-sample>=36 && read(f,sample,entry,36)){
+                    unsigned version=entry[16]<<8|entry[17];
+                    uint64_t size=number(entry.data());
+                    uint64_t offset=version==0?36:version==1?52:size;
+                    if(size<=limit-sample){
+                        while(offset<=size && size-offset>=8 && read(f,sample+offset,entry,8)){
+                            uint32_t boxSize=number(entry.data());
+                            if(boxSize<8 || boxSize>size-offset)break;
+                            if(textAt(entry,4,"alac") && boxSize>=36 && read(f,sample+offset+12,entry,24)){
+                                out["quality"]=losslessQuality(number(entry.data()+20),entry[5]);
+                                break;
+                            }
+                            offset+=boxSize;
+                        }
+                    }
+                }
+            }
             if(textAt(h,0,"mp4a"))out["quality"]="lossy";
         }else if(type=="moov"||type=="trak"||type=="mdia"||type=="minf"||type=="stbl"||type=="udta"||type=="ilst"||type=="meta"){
             if(type=="meta")start+=4;
@@ -172,7 +196,7 @@ template<class Source>
 inline Json inspectSource(Source& f,uint64_t end){
     Json out=Json::object();
     Bytes b;if(!read(f,0,b,std::min<uint64_t>(end,42)))return out;
-    out["bytes"]=end;out["factsVersion"]=2;out["quality"]="unknown";
+    out["bytes"]=end;out["factsVersion"]=3;out["quality"]="unknown";
     if(textAt(b,0,"fLaC")){
         uint64_t pos=4;out["quality"]="lossless";bool last=false;
         while(!last && end-pos>=4 && read(f,pos,b,4)){
@@ -180,7 +204,7 @@ inline Json inspectSource(Source& f,uint64_t end){
             if(n>end-pos)return out;
             if(type==0 && n>=34 && read(f,pos,b,34)){
                 const unsigned rate=b[10]<<12|b[11]<<4|b[12]>>4,bits=((b[12]&1)<<4|b[13]>>4)+1;
-                if(rate>=88200 && bits>=24)out["quality"]="hires";
+                out["quality"]=losslessQuality(rate,bits);
             }
             if(type==4 && n<=4*1024*1024 && read(f,pos,b,n))comments(b,0,out);
             pos+=n;
@@ -195,7 +219,7 @@ inline Json inspectSource(Source& f,uint64_t end){
                 auto fmt=b[0]|b[1]<<8,bits=b[14]|b[15]<<8;
                 // WAVE_FORMAT_EXTENSIBLE stores its actual PCM/float subtype in the GUID.
                 if(fmt==0xfffe&&b.size()>=40&&b[16]>=22)fmt=b[24]|b[25]<<8;
-                if(fmt==1||fmt==3)out["quality"]=bits>=24&&number(b.data()+4,true)>=88200?"hires":"lossless";
+                if(fmt==1||fmt==3)out["quality"]=losslessQuality(number(b.data()+4,true),bits);
             }else if(type=="ID3 "||type=="id3 ")id3(f,pos,pos+n,out);
             else if(type=="LIST"&&n>=4&&n<=1024*1024&&read(f,pos,b,n)&&textAt(b,0,"INFO")){
                 for(size_t p=4;p+8<=b.size();){

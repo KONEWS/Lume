@@ -79,6 +79,19 @@ final class RoomReceiver {
     }
     private static String UriEncode(String value){return android.net.Uri.encode(value);}
 
+    Runnable catalogCover(String id,String revision,String visible,java.util.function.Consumer<String> reply){
+        final int gen=generation;
+        final String url=base,auth=cookie;
+        return ()->{
+            String payload="";
+            if(gen==generation && !auth.isEmpty() && id.matches("[A-Za-z0-9_-]+") && revision.matches("[a-f0-9]{32}"))try{
+                String hint=visible.length()<=1024 && visible.matches("[A-Za-z0-9_,-]+")?"?visible="+UriEncode(visible):"";
+                payload=new String(get(url,"/api/catalog-cover/"+revision+"/"+id+hint,auth),StandardCharsets.UTF_8);
+            }catch(Exception ignored){}
+            reply.accept(gen==generation?payload:"");
+        };
+    }
+
     
     private volatile PcmOutput output;
     private long lastGood;
@@ -136,10 +149,24 @@ final class RoomReceiver {
     void connect(String address,String code) {
         connect(address,code,"","");
     }
-    void connect(String address,String code,String inviteToken,String deviceId) {
+    static class PreparedInvite {
+        final String id="native-"+UUID.randomUUID();
+        String cookie;
+    }
+    static PreparedInvite prepareInvite(JSONObject offer)throws Exception {
+        String url=host(offer.getString("url"));
+        PreparedInvite ready=new PreparedInvite();
+        ready.cookie=post(url,"/api/join/invite",offer,"").cookie;
+        if(ready.cookie.isEmpty())throw new IOException("邀请已失效");
+        JSONObject state=post(url,"/api/receiver",new JSONObject().put("id",ready.id).put("platform","Android").put("model",MobileHost.MODEL),ready.cookie).data;
+        if(!state.has("trackId")||!state.has("outputs"))throw new IOException("空间尚未就绪");
+        return ready;
+    }
+    void connect(String address,String code,String inviteToken,String deviceId) {connect(address,code,inviteToken,deviceId,null);}
+    void connect(String address,String code,String inviteToken,String deviceId,PreparedInvite prepared) {
         disconnect();
         final int gen=generation;
-        final String id="native-"+UUID.randomUUID();
+        final String id=prepared!=null?prepared.id:"native-"+UUID.randomUUID();
         this.deviceId=id;
         worker=Executors.newSingleThreadScheduledExecutor();
         ScheduledExecutorService session=worker;
@@ -147,7 +174,8 @@ final class RoomReceiver {
             try {
                 String url=host(address);
                 String auth;
-                if(!inviteToken.isEmpty()){
+                if(prepared!=null)auth=prepared.cookie;
+                else if(!inviteToken.isEmpty()){
                     try{auth=post(url,"/api/join/invite",new JSONObject().put("inviteToken",inviteToken).put("deviceId",deviceId),"").cookie;}
                     catch(Exception e){throw new IOException("邀请已失效或连接失败，请让房主重新邀请",e);}
                 }else if(code.isEmpty()){
@@ -175,11 +203,11 @@ final class RoomReceiver {
             PcmOutput active=output;if(active!=null)body.put("bufferMs",active.ahead).put("gaps",active.gaps).put("underflows",active.underflows);
             long before=SystemClock.elapsedRealtime();
             JSONObject data=post(url,"/api/receiver",body,auth).data;lastGood=SystemClock.elapsedRealtime();
+            long after=lastGood,stamp=(before+after)/2;
             if(gen!=generation)return;
             localAudio.select(data.optString("trackId"),data.optString("audioIdentity"),data.optLong("audioBytes"));
             LocalAudio.Match match=localAudio.current();
             data.put("localSong",match==null?JSONObject.NULL:match.song).put("localTrackId",match==null?"":data.optString("trackId"));
-            long after=SystemClock.elapsedRealtime(),stamp=(before+after)/2;
             if(gen!=generation)return;
             sourceAck=data.optInt("sourceAck",local.length());source.requested(data.optJSONObject("transfer"),url,auth);
             libraryVersion=data.optInt("libraryVersion",-1);

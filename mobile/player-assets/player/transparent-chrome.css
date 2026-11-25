@@ -1,0 +1,50 @@
+/* Keep the page surface visible beneath the title controls while scrolling. */
+html body #library-frame > header {
+  position: absolute;
+  inset: 0 0 auto;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) 42px;
+  align-items: center;
+  background: transparent;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  border: 0;
+  color: var(--studio-ink);
+  pointer-events: auto;
+}
+html body.listen-page #library-frame > header,
+html body.listen-page #library-frame > header.listen-scrolled {
+  position: absolute;
+  background: transparent;
+  color: var(--listen-ink);
+}
+html body #library-frame > header button {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+}
+html body #library-frame > header #page-heading {
+  margin: 0;
+  text-align: center;
+}
+html body.collection-page #library-frame > header #home-search { display: grid }
+html body #browse > #album-options {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  margin: 0 0 8px auto;
+  color: var(--studio-accent);
+}
+html body #browse > #stats-source-slot { margin: 0 0 12px }
+html body #scroll,
+html body.listen-page #scroll {
+  padding-top: calc(var(--lume-safe-top) + 64px);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, transparent calc(var(--lume-safe-top) + 55px), #000 calc(var(--lume-safe-top) + 68px));
+  mask-image: linear-gradient(to bottom, transparent 0, transparent calc(var(--lume-safe-top) + 55px), #000 calc(var(--lume-safe-top) + 68px));
+}
+html body #library-frame > header #page-heading {
+  text-shadow: 0 1px 5px color-mix(in srgb, var(--studio-surface) 75%, transparent);
+}
+

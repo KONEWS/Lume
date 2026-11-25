@@ -121,8 +121,9 @@ export function DesktopLyricsHost(props:Props) {
       const handle=async()=>{
         if(type==='ready'){ready.current=true;setFailed(false);sync();setFrameReady(true);return;}
         if(type==='closeLyrics'){
+          live.current.onClose();
           if(windowState.current.fullscreen)await native?.setFullscreen(false);
-          live.current.onClose();return;
+          return;
         }
         if(type==='queue'){live.current.onQueue();return;}
         if(type==='fullscreen'){await native?.setFullscreen(!windowState.current.fullscreen);return;}

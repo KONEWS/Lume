@@ -22,6 +22,9 @@ await fs.writeFile(path.join(dataDir,'library.json'),JSON.stringify({tracks,queu
 const server=await startServer({port:0,host:'127.0.0.1',dataDir,resourcesDir,staticDir:path.join(root,'dist')});
 const browser=await chromium.launch({headless:true,channel:'msedge',args:['--autoplay-policy=no-user-gesture-required']});
 const page=await browser.newPage({viewport:{width:1440,height:960},deviceScaleFactor:1});
+// The isolated lyrics fixture has no personal-device helper or LAN peers.
+await page.route('**/api/personal',route=>route.request().postDataJSON()?.op==='status'
+  ? route.fulfill({json:{peers:[],offers:[]}}) : route.continue());
 const errors=[],missing=[],checks=[];
 page.on('pageerror',e=>errors.push(e.message));page.on('response',r=>{if(r.status()>=400)missing.push({url:r.url(),status:r.status()});});
 await page.addInitScript(()=>{

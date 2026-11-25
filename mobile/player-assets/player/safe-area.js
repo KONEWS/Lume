@@ -1,6 +1,10 @@
 // Native WebViews do not consistently expose the window's avoid areas through env().
 // Keep the surface edge-to-edge and pass only content insets to the shared UI.
 (() => {
+  // Set the saved home palette before the WebView can paint the document.
+  let theme = 'light';
+  try { if (JSON.parse(localStorage.getItem('lume-listen-theme')) === 'dark') theme = 'dark'; } catch {}
+  document.documentElement.dataset.phoneTheme = theme;
   const edges = ['top', 'right', 'bottom', 'left'];
   window.lumeInsets = (insets = {}) => {
     const root = document.documentElement;

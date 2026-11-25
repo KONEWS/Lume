@@ -27,7 +27,7 @@ export class PcmOutput {
       if(this.fetching.size>=2)break;
       if(!this.buffers.has(n)&&!this.fetching.has(n))this.load(n,auth,this.generation);
     }
-    this.underflows=core.sync(playing,at-pos*1000+delay,duration,volume);
+    this.underflows=core.sync(playing,at-pos*1000,duration,volume,delay);
     this.error=this.underflows<0?'音频输出启动失败':'';
     this.gaps=core.gaps();
   }

@@ -12,7 +12,7 @@
 .lg-stage [hidden]{display:none!important}
 .lg-stage *{box-sizing:border-box}
 .lg-surface{position:relative;isolation:isolate;background:var(--lg-surface-fallback);backdrop-filter:blur(var(--lg-fallback-blur,10px)) saturate(1.3);box-shadow:var(--lg-surface-shadow)}
-.webgl-ready .lg-surface{background:transparent;box-shadow:none;backdrop-filter:none}
+:is(.webgl-ready,.phone-material) .lg-surface{background:transparent;box-shadow:none;backdrop-filter:none}
 .fallback .lg-surface{background:#f5f8fbd9;backdrop-filter:blur(var(--lg-fallback-blur,10px))}
 .fallback[data-scene=ocean] .lg-surface{background:#233e59eb}
 .lg-stage.opaque .lg-surface{background:var(--lg-surface-solid)!important;color:var(--lg-color-text)!important}

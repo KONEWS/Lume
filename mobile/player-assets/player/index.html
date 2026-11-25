@@ -2,13 +2,14 @@
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<style>html{background-color:#10121e}</style>
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src data: blob:; worker-src blob:; font-src blob: data:; base-uri 'none'; form-action 'none'">
-<title>澄音 LUME</title>
+<link rel="icon" href="lume.png" type="image/png"><title>澄音 LUME</title>
 <script src="safe-area.js"></script>
 <script src="mobile-text.js"></script>
 <link rel="stylesheet" href="lens/tokens.css"><link rel="stylesheet" href="lens/components.css"><link rel="stylesheet" href="player.css">
 <link rel="stylesheet" href="liquid-material.css"><link rel="stylesheet" href="liquid-phone.css">
-<link rel="stylesheet" href="sidebar.css"><link rel="stylesheet" href="library-report.css">
+<link rel="stylesheet" href="sidebar.css"><link rel="stylesheet" href="library-report.css"><link rel="stylesheet" href="scan-meter.css"><script defer src="scan-meter.js"></script>
 <link rel="stylesheet" href="scan-rules.css"><script defer src="scan-rules.js"></script>
 <link rel="stylesheet" href="player-motion.css"><script defer src="player-motion.js"></script><script defer src="queue-motion.js"></script>
 <link rel="stylesheet" href="studio-theme.css"><link rel="stylesheet" href="studio-phone.css">
@@ -17,37 +18,47 @@
 <link rel="stylesheet" href="playback-seek.css">
 <link rel="stylesheet" href="plain-lyrics.css"><script defer src="plain-lyrics.js"></script>
 <link rel="stylesheet" href="cover-style.css">
+<script defer src="cover-theme.js"></script>
+<link rel="stylesheet" href="cover-theme-motion.css">
+<link rel="stylesheet" href="personal-devices.css"><script defer src="personal-devices.js"></script>
 <script defer src="listening.js"></script><script defer src="listen-home.js"></script>
-<script defer src="library-report.js"></script><link rel="stylesheet" href="statistics.css"><script defer src="statistics-data.js"></script><script defer src="statistics.js"></script>
+<script defer src="quality-labels.js"></script><script defer src="library-report.js"></script><link rel="stylesheet" href="statistics.css"><script defer src="statistics-data.js"></script><script defer src="statistics.js"></script>
 <link rel="stylesheet" href="song-actions.css">
 <link rel="stylesheet" href="library-sort.css"><script defer src="library-sort.js"></script>
 <script defer src="song-actions.js"></script>
 <script defer src="settings-sheet.js"></script>
+<script defer src="collection-pages.js"></script>
 <link rel="stylesheet" href="library-locate.css"><script defer src="library-locate.js"></script>
 <link rel="stylesheet" href="dropdown.css"><script defer src="dropdown.js"></script>
-<script defer src="liquid-glass.js"></script><script defer src="sidebar.js"></script><script defer src="cover-style.js"></script><script defer src="outputs.js"></script><script defer src="song-details.js"></script><script defer data-mobile src="folia/host.js"></script><script defer src="library-covers.js"></script><script defer src="player.js"></script>
+<script defer src="liquid-glass.js"></script><script defer src="sidebar.js"></script><script defer src="cover-style.js"></script><script defer src="outputs.js"></script><script defer src="song-details.js"></script><script defer data-mobile src="folia/host.js"></script><script defer src="library-covers.js"></script><script defer src="curved-dock-progress.js"></script><script defer src="player.js"></script>
 <link rel="stylesheet" href="listen-space.css">
+<link rel="stylesheet" href="collection-pages.css">
+<link rel="stylesheet" href="listening-surface.css"><link rel="stylesheet" href="listening-phone.css">
+<link rel="stylesheet" href="transparent-chrome.css">
+<link rel="stylesheet" href="borderless-spaces.css">
+<link rel="stylesheet" href="curved-dock-progress.css">
 </head>
-<body>
+<body class="listen-page">
+<lume-personal-alerts></lume-personal-alerts>
 <div id="library-frame">
 <aside id="sidebar" aria-label="音乐导航" inert>
-  <div class="side-mast"><span class="brand"><i></i>澄音 <b>LUME</b></span></div>
+  <div class="side-mast"><span class="brand">澄音 <b>LUME</b></span></div>
   <section class="side-browse"><h2>我的音乐</h2><div id="browse-links"></div></section>
   <section class="side-manage"><h2>曲库管理</h2><div id="manage-links"></div></section>
 </aside>
-<header><button class="icon" id="open-menu" aria-label="打开侧边栏" aria-controls="sidebar" aria-expanded="false"><i data-icon="menu"></i></button><span class="brand"><i></i>澄音 <b>LUME</b></span><span id="source"></span>
+<header><button class="icon" id="open-menu" aria-label="打开侧边栏" aria-controls="sidebar" aria-expanded="false"><i data-icon="menu"></i></button><span class="brand">澄音 <b>LUME</b></span><span id="source"></span>
 <h1 id="page-heading">聆听</h1><button id="home-search" class="icon" aria-label="搜索歌曲、艺人或专辑"><i data-icon="search"></i></button></header>
 <main id="scroll">
-<section id="home">
+<section id="home" class="listening-surface">
 <div class="listen-feature">
-<button id="home-feature" class="hero" aria-label="打开播放器">
-<span class="listen-disc" aria-hidden="true"><span class="disc-groove"></span><span class="hero-cover"></span></span>
-<span class="hero-info"><strong><lume-song-title data-title id="home-title"></lume-song-title></strong><small id="home-artist"></small></span>
+<button id="home-feature" class="hero" aria-label="打开播放器" disabled>
+<span class="listen-disc" aria-hidden="true"><span class="hero-cover"></span></span>
+<span class="hero-info"><span class="track-status" id="home-status"></span><strong><lume-song-title data-title id="home-title"></lume-song-title></strong><small id="home-artist"></small><span class="feature-action" id="home-play-label"></span></span>
 </button><div id="home-pages" aria-label="精选曲目"></div>
 </div>
 <div class="home-actions">
-<button id="home-history"><i data-icon="heart"></i>最近爱听</button>
-<button id="home-shuffle"><i data-icon="shuffle"></i>随心动听</button>
+<button id="home-history"><i data-icon="heart"></i>最近播放</button>
+<button id="home-shuffle"><i data-icon="shuffle"></i>随机播放</button>
 <button data-tab="space"><i data-icon="cloud"></i>播放空间</button>
 </div>
 <div class="home-sections">
@@ -64,39 +75,40 @@
 <button id="shuffle-song" class="browse-action"><i data-icon="shuffle"></i>随机选曲 <span id="song-count"></span></button>
 <label data-glass="panel" class="search lg-surface"><i data-icon="search"></i><input id="query" type="search" placeholder="搜索歌曲、艺人或专辑" aria-label="搜索歌曲、艺人或专辑"></label>
 <div class="section-title"><div class="filters" data-lens-group><i data-lens-marker data-glass="selected" aria-hidden="true"></i><button id="all" aria-pressed="true">全部</button><button id="liked" aria-pressed="false">收藏</button></div><button id="library-sort-button" aria-haspopup="dialog" aria-controls="library-sort"><i data-icon="sort"></i> 排序</button></div>
-<button class="pill" id="import-pause" hidden></button><div id="library-list"></div>
+<lume-scan-meter id="library-scan-meter" hidden></lume-scan-meter><button class="pill" id="scan-stop" hidden></button><div id="library-list"></div>
 </section>
 <section id="space" hidden>
-<div id="local-device" class="space-device"><i data-icon="disc"></i><strong>本机</strong><span id="this-device"></span></div>
+<button type="button" id="local-device" aria-label="编辑本机名称" class="space-device self-name-row"><i data-icon="disc"></i><strong>本机</strong><span id="this-device"></span></button>
 <div class="space-section-heading"><i class="room-symbol" data-icon="radio"></i><h2 id="room-heading"></h2><div id="space-tools"><button id="manual-button" class="icon" aria-label="手动配对" title="手动配对" aria-controls="pair" aria-expanded="false"><i data-icon="plus"></i></button><button id="refresh-spaces" class="icon" aria-label="刷新附近空间，搜索 30 秒" title="刷新附近空间"><svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-refresh-cw" aria-hidden="true" focusable="false"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"></path><path d="M21 3v5h-5"></path><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"></path><path d="M8 16H3v5"></path></svg></button></div></div>
 <div id="manual-box"><form id="pair" hidden><label>主机地址<input id="host" type="text" placeholder="http://192.168.1.2:46321" autocapitalize="off" required></label><label>配对码<input id="pin" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" placeholder="六位数字" required></label><button class="pill">加入空间</button></form></div>
-<p id="room-status" role="status" aria-live="polite"></p><p id="host-state" role="status" aria-live="polite" hidden></p><div id="hosts"></div><div id="host-tools" hidden><p id="host-details"></p></div><section id="invite-tools" hidden><button id="search-phones" class="pill">搜索附近设备</button><p id="phone-search-status" role="status" aria-live="polite"></p><div id="nearby-phones"></div></section><div id="requests"></div><div id="outputs" hidden></div><p id="compat-note" hidden>请将创建空间的设备升级至 0.5.4 或更新版本，即可在此调整输出。</p><div class="space-actions"><button id="create-room" class="pill">用本机创建空间</button><button id="room-action" class="pill" hidden></button></div>
+<p id="room-status" role="status" aria-live="polite"></p><p id="host-state" role="status" aria-live="polite" hidden></p><details id="guest-connection" hidden><summary>连接详情</summary></details><div id="hosts"></div><div id="host-tools" hidden><p id="host-details"></p><details id="host-pair" hidden><summary>手动配对</summary><p id="host-code"></p></details></div><section id="invite-tools" hidden><button id="search-phones" class="pill">搜索附近设备</button><p id="phone-search-status" role="status" aria-live="polite"></p><div id="nearby-phones"></div></section><div id="requests"></div><div id="outputs" hidden></div><p id="compat-note" hidden>请将创建空间的设备升级至 0.5.4 或更新版本，即可在此调整输出。</p><div class="space-actions"><button id="create-room" class="pill">用本机创建空间</button><button id="room-action" class="pill" hidden></button></div>
+<lume-personal-devices></lume-personal-devices>
 </section>
-<section id="browse" hidden><button id="browse-back" class="browse-action" hidden>‹ 返回</button><h1 id="browse-title" tabindex="-1"></h1><div id="browse-content"></div></section>
+<section id="browse" hidden><button id="browse-back" class="browse-action" hidden>‹ 返回</button><h1 id="browse-title" tabindex="-1"></h1><div id="stats-source-slot" hidden></div><button id="album-options" class="icon" aria-label="专辑列表设置" aria-haspopup="dialog" aria-controls="album-settings" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 11h18"/></svg></button><div id="browse-content"></div></section>
 </main>
 <button id="locate-current" type="button" aria-label="定位当前曲目" title="定位当前曲目" aria-controls="library-list"><svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2"/><path d="M12 2v3m0 14v3M2 12h3m14 0h3"/></svg></button>
+<button id="playlist-add" type="button" aria-label="添加音乐" aria-haspopup="dialog"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 4v16M4 12h16"/></svg></button>
 <button id="close-menu" aria-label="收起侧边栏" inert></button>
 </div>
 <footer id="phone-dock" data-open="nav">
   <div class="dock-navigation">
     <nav id="dock-tabs" aria-label="主导航" data-lens-group>
-      <button data-tab="home" aria-label="聆听"><i data-icon="disc"></i><span aria-hidden="true">聆听</span></button>
-      <button data-tab="library" aria-label="曲库"><i data-icon="library"></i><span aria-hidden="true">曲库</span></button>
-      <button data-browse="artists" aria-label="艺术家"><i data-icon="person"></i><span aria-hidden="true">艺术家</span></button>
-      <button data-tab="space" aria-label="播放空间"><i data-icon="radio"></i><span aria-hidden="true">播放空间</span></button>
-      <button data-browse="playlists" aria-label="歌单"><i data-icon="list"></i><span aria-hidden="true">歌单</span></button>
     </nav>
     <button id="dock-nav-button" data-action="show-tabs" aria-controls="dock-tabs" aria-expanded="false"><i></i><span></span></button>
   </div>
   <div id="mini">
     <button class="mini-track" data-action="mini-track" aria-label="展开迷你播放器" aria-expanded="false"><span class="thumb" id="mini-art"></span><span class="meta"><strong><lume-song-title data-title></lume-song-title></strong><small data-artist></small></span></button>
+    <svg id="mini-circle-progress" viewBox="0 0 52 52" aria-hidden="true" focusable="false">
+      <circle class="circle-track" cx="26" cy="26" r="24"/>
+      <!-- The 9:45 hour-hand position, sweeping down the left side. -->
+      <path class="circle-fill" pathLength="100" d="M 3.827 16.816 A 24 24 0 0 0 48.173 35.184 A 24 24 0 0 0 3.827 16.816 Z"/>
+    </svg>
     <button data-glass="small" data-elastic="press" class="icon toggle" data-action="toggle"></button>
     <button class="icon" data-action="next" aria-label="下一首"><i data-icon="next"></i></button>
     <button data-glass="small" data-elastic="press" class="icon" data-action="player-queue" aria-label="播放列表" aria-haspopup="dialog" aria-controls="queue-sheet"><i data-icon="list"></i></button>
-    <i id="mini-progress"></i>
   </div>
 </footer>
-<section id="full" aria-label="正在播放" hidden><div class="full-head"><button class="icon" data-action="close" aria-label="收起播放器"><i data-icon="down"></i></button><button class="icon" data-action="player-queue" aria-label="播放列表" aria-haspopup="dialog" aria-controls="queue-sheet"><i data-icon="list"></i></button></div>
+<section id="full" tabindex="-1" aria-label="正在播放" hidden><div class="full-head"><button class="icon detail-exit" data-action="close" aria-label="收起播放器"><i data-icon="down"></i></button><button class="icon" data-action="player-queue" aria-label="播放列表" aria-haspopup="dialog" aria-controls="queue-sheet"><i data-icon="list"></i></button></div>
 <div class="full-content"><div id="album" role="button" tabindex="0" aria-label="查看歌词"></div><div id="lyrics-panel" hidden>暂无歌词</div><div id="folia-stage" hidden></div><div class="full-playback"><div class="full-meta"><div class="meta"><h1><lume-song-title data-title></lume-song-title></h1><p data-artist></p></div><button id="landscape-lyrics" class="icon" aria-label="歌词" aria-pressed="false" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M20 4H4a1 1 0 0 0-1 1v12h4v4l5-4h8a1 1 0 0 0 1-1V5a1 1 0 0 0-1-1Z"/><path d="M7 9h10M7 12h6"/></svg></button><button class="icon" id="favorite" aria-label="收藏当前曲目"><i data-icon="heart"></i></button></div>
 <p id="playback-status" role="status" hidden></p>
 <div class="translation-tools"><div class="full-options"><button id="style-settings" class="icon" aria-label="歌词样式设置" title="歌词样式设置" hidden><span aria-hidden="true">Aa</span></button><button id="more-lyrics" class="pill" hidden>更多歌词</button><label id="style-picker" hidden><select aria-label="选择歌词样式" id="lyric-style"></select></label></div><button id="translation-choice" class="icon" aria-label="显示译文" aria-pressed="false" hidden><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 8 6 6"/><path d="m4 14 6-6 2-3"/><path d="M2 5h12"/><path d="M7 2h1"/><path d="m22 22-5-10-5 10"/><path d="M14 18h6"/></svg></button></div><div class="seek"><div class="seek-rail"><input type="range" id="seek" min="0" max="1000" step="1" aria-label="播放进度"><i aria-hidden="true" id="seek-lens"></i></div><div><span class="seek-times"><time id="elapsed"></time><time id="seek-target" hidden></time></span><time id="duration"></time></div></div>
@@ -104,6 +116,11 @@
 </div></div>
 </section>
 
+<dialog id="album-settings" class="song-action-sheet settings-sheet" aria-labelledby="album-settings-title">
+  <div class="settings-sheet-header"><button class="settings-sheet-grip" role="slider" aria-label="调整面板高度" aria-orientation="vertical" aria-valuemin="20" aria-valuemax="92" aria-valuenow="67"></button><h2 id="album-settings-title">专辑列表设置</h2></div>
+  <button class="song-sheet-close" aria-label="关闭专辑列表设置">×</button>
+  <div class="settings-sheet-content"></div>
+</dialog>
 <dialog id="library-sort" class="song-action-sheet settings-sheet" aria-labelledby="library-sort-title">
   <div class="settings-sheet-header">
     <button type="button" class="settings-sheet-grip" role="slider" aria-label="调整排序面板高度" aria-orientation="vertical" aria-valuemin="20" aria-valuemax="92" aria-valuenow="67"></button>
@@ -144,6 +161,6 @@
   </div>
 </dialog>
 <dialog id="queue-sheet" aria-labelledby="queue-title"><div class="queue-heading"><h2 id="queue-title">播放列表</h2><button class="icon" id="close-queue" aria-label="关闭播放列表"><i data-icon="down"></i></button></div><div id="queue-tracks"></div></dialog>
-<dialog id="room-invite" aria-labelledby="invite-title"><h2 id="invite-title">播放空间邀请</h2><p id="invite-from"></p><button class="pill" id="accept-invite">加入</button> <button class="pill" id="decline-invite">忽略</button></dialog>
+<dialog id="room-invite" aria-labelledby="invite-title"><h2 id="invite-title">播放空间邀请</h2><p id="invite-from"></p><div class="consent-actions"><button class="pill" id="accept-invite">加入</button><button class="pill" id="decline-invite">忽略</button></div></dialog>
 <p id="notice" role="status" hidden></p>
 </body></html>

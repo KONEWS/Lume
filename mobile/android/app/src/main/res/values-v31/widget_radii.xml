@@ -1,0 +1,5 @@
+<resources>
+    <!-- The system inner radius is intended for the 8dp cover inset. -->
+    <item name="widget_outer_radius" type="dimen">@android:dimen/system_app_widget_background_radius</item>
+    <item name="widget_cover_radius" type="dimen">@android:dimen/system_app_widget_inner_radius</item>
+</resources>

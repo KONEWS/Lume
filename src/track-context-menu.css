@@ -1,0 +1,9 @@
+.track-context{position:fixed;z-index:300;width:204px;padding:5px;box-sizing:border-box;border:1px solid color-mix(in srgb,currentColor 20%,transparent);border-radius:9px;color:var(--skin-ink,#edf0fa);background:var(--skin-surface,#252b3a);box-shadow:0 8px 28px #0005;font-size:13px;-webkit-app-region:no-drag}
+.track-context button{display:flex;align-items:center;gap:11px;width:100%;min-height:33px;padding:6px 10px;text-align:left;color:inherit;border:0;border-radius:4px;background:transparent;font:inherit}
+.track-context button:is(:focus-visible,:hover,[aria-expanded=true]):enabled{outline:none;background:color-mix(in srgb,var(--skin-accent,#a0b9fa) 19%,transparent)}
+.track-context button:disabled{opacity:.5}
+.track-context svg{width:16px;height:16px;flex:none;stroke-width:1.7}
+.track-context .track-menu-arrow{margin-left:auto;width:14px}
+.track-context hr{height:1px;border:0;background:color-mix(in srgb,currentColor 14%,transparent);margin:4px 3px}
+.track-context small{display:block;padding:9px;font-size:12px}
+.track-submenu{max-height:min(250px,80vh);overflow:auto}

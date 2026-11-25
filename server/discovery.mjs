@@ -3,7 +3,7 @@ import os from 'node:os';
 import { randomBytes } from 'node:crypto';
 
 export function deviceName(platform, model) {
-  const name = typeof model === 'string' ? model.trim().slice(0, 80) : '';
+  const name = typeof model === 'string' ? model.trim() : '';
   return name || (platform === 'Android' ? '安卓手机' : '鸿蒙手机');
 }
 
@@ -18,27 +18,37 @@ function broadcastAddresses() {
 }
 
 // The desktop probes only while its connection window is polling.
-export function nearbyPhones(port, roomName) {
+export function nearbyPhones(port, roomName, selfId='') {
   const socket = dgram.createSocket('udp4');
   const nonce = randomBytes(12).toString('hex');
   const peers = new Map();
+  const grants=new Map(),feedback=new Map();
   let lastProbe = 0;
   socket.on('message', (bytes, peer) => {
-    if (Date.now() - lastProbe > 5000 || bytes.length > 1024) return;
+    if(bytes.length>9216)return;
     let data;
     try { data = JSON.parse(bytes); } catch { return; }
+    if(data?.service==='lume-invite-status/1'&&peer.port===46324){
+      const grant=grants.get(data.inviteToken);
+      if(!grant||grant.until<=Date.now()||grant.id!==data.id||grant.address!==peer.address)return;
+      const text={shown:'对方已看到邀请',declined:'对方已忽略邀请',expired:'邀请已超时'}[data.status];
+      if(text)feedback.set(grant.id,text);
+      if(data.status==='declined'||data.status==='expired')grants.delete(data.inviteToken);
+      return;
+    }
+    if(Date.now()-lastProbe>5000)return;
     if (data?.service==='lume-room/1' && data.guest===true && peer.port===46322 && Number.isInteger(data.port) && data.port>0 && data.port<=65535) {
       if (data.port===port && Object.values(os.networkInterfaces()).flat().some(n=>n?.address===peer.address)) return;
-      const id='room-'+peer.address+'-'+data.port;
-      if(peers.size<128 || peers.has(id))peers.set(id,{id, platform:'播放空间',name:String(data.name||'播放空间').slice(0,100),
+      const id='room-'+(/^[a-f0-9]{32}$/.test(data.roomId||'')?data.roomId:peer.address+'-'+data.port);
+      if(peers.size<128 || peers.has(id))peers.set(id,{id, platform:'播放空间',name:String(data.name||'播放空间'),
         address:peer.address,roomPort:data.port,seen:Date.now()});
       return;
     }
     if (peer.port!==46324 || data?.service !== 'lume-phone/1' || data.nonce !== nonce ||
-        !['Android','HarmonyOS'].includes(data.platform) || typeof data.id !== 'string' ||
+        !['Android','HarmonyOS','Windows'].includes(data.platform) || data.id===selfId || typeof data.id !== 'string' ||
         !/^[a-f0-9]{32}$/.test(data.id) || (!peers.has(data.id) && peers.size >= 128)) return;
     peers.set(data.id, { id:data.id, platform:data.platform, name:deviceName(data.platform, data.model),
-      address:peer.address, seen:Date.now() });
+      address:peer.address, seen:Date.now(),availability:data.availability||'available',proof:data.inviteProof||'' });
   });
   socket.on('error', () => {});
   const ready = new Promise((resolve, reject) => {
@@ -54,6 +64,7 @@ export function nearbyPhones(port, roomName) {
       error => error ? reject(error) : resolve()));
   }
   function prune() {
+    for(const [key,g] of grants)if(g.until<=Date.now()){grants.delete(key);feedback.set(g.id,'邀请已超时');}
     for (const [id, p] of peers) if (Date.now() - p.seen > 7500) peers.delete(id);
   }
   return {
@@ -63,9 +74,10 @@ export function nearbyPhones(port, roomName) {
       if (Date.now() - lastProbe >= 1000) {
         lastProbe = Date.now();
         for (const address of broadcastAddresses()) socket.send('LUME_DISCOVER_1',46322,address,()=>{});
-        await Promise.any([...broadcastAddresses()].map(address => send({service:'lume-find-phone/1', nonce}, address)));
+        await Promise.any([...broadcastAddresses()].map(address => send({service:'lume-find-phone/1', nonce,includeBusy:true,senderId:selfId}, address)));
       }
-      return [...peers.values()].map(({id, platform, name, address,roomPort}) => ({id, platform, name, address,...(roomPort?{roomPort}:{})}));
+      return [...peers.values()].map(({id,platform,name,address,roomPort,availability,proof})=>({id,platform,name,address,availability,
+        hostInvitable:!!proof,inviteStatus:feedback.get(id),...(roomPort?{roomPort}:{})}));
     },
     roomUrl(id) {
       prune();const r=peers.get(id);
@@ -74,25 +86,36 @@ export function nearbyPhones(port, roomName) {
     async invite(id) {
       prune();
       const peer = peers.get(id);
-      if (!peer || peer.roomPort) return false;
-      await send({service:'lume-invite/1', id, name:roomName(), port}, peer.address);
+      if (!peer || peer.roomPort || !(peer.availability==='available'||peer.availability==='hosting'&&peer.proof)) return false;
+      const secret=randomBytes(16).toString('hex');
+      if(grants.size>=128)return false;
+      grants.set(secret,{id,address:peer.address,until:Date.now()+60000});feedback.set(id,'已发出邀请，等待回应');
+      try{await send({service:'lume-invite/1', id, name:roomName(), port,inviteToken:secret,inviteProof:peer.proof}, peer.address);}
+      catch(err){grants.delete(secret);feedback.delete(id);throw err;}
       return true;
     },
+    redeem(secret,id,address){
+      prune();const grant=grants.get(secret);
+      if(!grant||grant.id!==id||grant.address!==address)return false;
+      grants.delete(secret);feedback.set(id,'对方已接受邀请');return true;
+    },
+    resetGrants(){grants.clear();feedback.clear();},
     close() { socket.close(); }
   };
 }
 
-export function advertise(port, roomName) {
+export function advertise(port, roomName, roomId,hosting=()=>true) {
   const socket = dgram.createSocket({ type:'udp4', reuseAddr:true });
-  const reply = () => Buffer.from(JSON.stringify({ service:'lume-room/1', port, guest:true, name:roomName() }));
+  const reply = () => Buffer.from(JSON.stringify({ service:'lume-room/1', port, guest:true, roomId, name:roomName() }));
   socket.on('error', () => {}); // Networks can prohibit broadcast. Manual pairing still works.
   socket.on('message', (data, peer) => {
-    if (data.toString() === 'LUME_DISCOVER_1') socket.send(reply(), peer.port, peer.address);
+    if (hosting()&&data.toString() === 'LUME_DISCOVER_1') socket.send(reply(), peer.port, peer.address);
   });
   let timer;
   socket.bind(46322, () => {
     socket.setBroadcast(true);
     timer=setInterval(() => {
+      if(!hosting())return;
       for (const address of broadcastAddresses()) socket.send(reply(),46323,address);
     },2000);
     timer.unref();
@@ -125,6 +148,7 @@ export function joinRequests(app, broadcast, issueSession) {
     res.set('Cache-Control','no-store').json({decision:r.decision});
   });
   return {
+    clear(){requests.clear();},
     pending(){prune();return [...requests.values()].filter(r=>r.decision==='pending').map(({id,platform,name,until})=>({id,platform,name,until}));},
     decide(id,decision){prune();const r=requests.get(id);if(r && ['allow','deny'].includes(decision))r.decision=decision;}
   };

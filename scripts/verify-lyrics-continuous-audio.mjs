@@ -17,7 +17,8 @@ const lyrics=real?await readFile(path.join(root,'artifacts/room-lyrics-sync-2026
 await writeFile(path.join(out,'continuous.lrc'),lyrics);
 const server=createServer(async(req,res)=>{try{
  const name=new URL(req.url,'http://localhost').pathname;
- const file=name==='/audio.wav'?path.join(root,real?'artifacts/room-lyrics-sync-20261121/real-audio/song.flac':'resources/demo/tide.wav'):path.join(assets,name);
+ const file=name==='/audio.wav'?path.join(root,real?'artifacts/room-lyrics-sync-20261121/real-audio/song.flac':'resources/demo/calibration.wav'):
+   name.startsWith('/baseline/player/')?path.join(baseline,name.slice('/baseline/player/'.length)):path.join(assets,name);
  res.setHeader('Content-Type',({'.flac':'audio/flac','.wav':'audio/wav','.js':'text/javascript','.css':'text/css','.html':'text/html','.svg':'image/svg+xml'})[path.extname(file)]||'application/octet-stream');res.end(await readFile(file));
 }catch{res.writeHead(404).end();}});
 await new Promise(r=>server.listen(0,'127.0.0.1',r));
@@ -27,8 +28,8 @@ try{
 for(const variant of ['baseline','fixed'])for(const platform of ['Android','HarmonyOS'])for(const joined of [false,true]){
  // Production audio is native; allow the test-only HTMLAudio fixture in this browser context.
  const context=await browser.newContext({viewport:{width:844,height:390},bypassCSP:true}),page=await context.newPage();
- if(variant==='baseline')for(const name of ['player.js','plain-lyrics.js'])await page.route('**/player/'+name,route=>route.fulfill({path:path.join(baseline,name),contentType:'text/javascript'}));
- await page.goto(`http://127.0.0.1:${server.address().port}/player/index.html`);await page.waitForFunction(()=>typeof lumeUpdate==='function');
+ const prefix=variant==='baseline'?'/baseline':'';
+ await page.goto(`http://127.0.0.1:${server.address().port}${prefix}/player/index.html`);await page.waitForFunction(()=>typeof lumeUpdate==='function');
  await page.evaluate(async({platform,joined,lyrics,real})=>{
   window.LumeNative={dispatch:()=>{}};
   lumeUpdate({platform,joined,host:joined?'audio-clock-room':'',songs:[{id:'demo',title:'Continuous words'}],id:'demo',title:'Continuous words',duration:real?211.973333:60,pos:0,playing:false});
@@ -65,5 +66,5 @@ for(const variant of ['baseline','fixed'])for(const platform of ['Android','Harm
  reports.push(report);console.log(JSON.stringify(report));
  await context.close();
 }
-await writeFile(path.join(out,real?'real-song-results.json':'results.json'),JSON.stringify({audio:real?'Idol - YOASOBI.flac (read-only copy from connected Android music folder)':'resources/demo/tide.wav',lyrics:real?'Original embedded lyrics: 90 lines, 595 timed words':'continuous.lrc (1600 enhanced-LRC words)',scope:'Real Chromium audio decoding and DOM fill measurements; native bridge cadence simulated. Not a physical phone/GPU measurement or audible dual-device listening test.',reports},null,2));
+await writeFile(path.join(out,real?'real-song-results.json':'results.json'),JSON.stringify({audio:real?'Idol - YOASOBI.flac (read-only copy from connected Android music folder)':'resources/demo/calibration.wav',lyrics:real?'Original embedded lyrics: 90 lines, 595 timed words':'continuous.lrc (1600 enhanced-LRC words)',scope:'Real Chromium audio decoding and DOM fill measurements; native bridge cadence simulated. Not a physical phone/GPU measurement or audible dual-device listening test.',reports},null,2));
 }finally{await browser.close();server.close();}

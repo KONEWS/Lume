@@ -1,0 +1,58 @@
+/* Use one cover and one set of credits, including while a new cover decodes. */
+body.listen-page #library-frame,
+body.listen-page #library-frame > header { background:var(--listen-paper); color:var(--listen-ink) }
+body.listen-page #library-frame > header { position:relative }
+body.listen-page #scroll { padding-top:8px }
+#home {
+  --ink:var(--listen-ink); --muted:var(--listen-secondary); --accent:var(--listen-action);
+  --studio-line:var(--listen-rule); --studio-control:var(--listen-surface);
+  --studio-selected:var(--listen-hover); --listen-line:var(--listen-rule);
+}
+#home .hero {
+  position:relative; display:grid; grid-template-columns:clamp(96px,35%,218px) minmax(0,1fr);
+  gap:clamp(14px,4vw,34px); align-items:center; justify-items:stretch; width:100%;
+  height:auto; min-height:0; padding:8px 0; border:0; background:none; box-shadow:none;
+}
+#home .hero::before { display:none }
+#home .listen-disc {
+  grid-area:1/1; position:relative; overflow:hidden; aspect-ratio:1; align-self:center;
+  border-radius:var(--sleeve-radius); background:var(--listen-surface);
+  border:1px solid var(--listen-rule); box-shadow:0 5px 16px #17121512;
+}
+#home .listen-disc .hero-cover {
+  display:block; width:100%; height:100%; max-width:none; border-radius:inherit;
+  background-position:center; background-size:cover; outline:0; box-shadow:none;
+}
+#home .hero-info { grid-area:1/2; position:static; text-align:left; align-self:center; color:var(--listen-ink) }
+#home .hero-info strong { margin:7px 0 3px; font-size:clamp(22px,5.5vw,36px); font-weight:700; letter-spacing:-.025em }
+#home .hero-info lume-song-title > span { margin:0 }
+#home .hero-info small { overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
+#home .feature-action {
+  display:inline-flex; align-items:center; justify-content:center; margin-top:12px; padding:0 18px;
+  min-height:36px; min-width:72px; border-radius:24px; background:var(--listen-action); color:var(--listen-surface);
+  font-size:13px; font-weight:650;
+}
+#home-pages { display:flex; justify-content:center; align-items:center }
+.home-dot { display:grid; place-items:center; width:30px; height:32px }
+.home-dot::after { content:''; width:6px; height:6px; border-radius:9px; background:var(--listen-rule) }
+.home-dot[aria-pressed=true]::after { width:18px; background:var(--listen-action) }
+#home .home-actions { margin:8px 0 20px; max-width:none; gap:8px }
+#home .home-actions svg { color:var(--listen-action) }
+#home .section-title h2 { letter-spacing:0 }
+#home .home-track .thumb { border-radius:var(--sleeve-radius) }
+#home-recent { grid-template-columns:repeat(2,minmax(0,1fr)); gap:6px 12px }
+#home-recent .home-track {
+  display:grid; grid-template-columns:44px minmax(0,1fr); grid-template-rows:1fr 1fr;
+  column-gap:8px; align-items:end; min-height:48px;
+}
+#home-recent .thumb { grid-row:1/3; margin:0; align-self:center }
+#home-recent small { align-self:start }
+
+@media (orientation:landscape) {
+  body.listen-page #scroll {
+    padding-inline:calc(18px + var(--lume-safe-left)) calc(18px + var(--lume-safe-right));
+  }
+}
+@media (orientation:landscape) and (min-width:640px) {
+  #home .hero { grid-template-columns:min(24vw,150px) minmax(0,1fr) }
+}

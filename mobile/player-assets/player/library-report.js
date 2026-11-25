@@ -1,5 +1,4 @@
 (() => {
-  const qualityLabels={hires:'Hi-Res 无损',lossless:'无损',lossy:'有损',unknown:'未知'};
   const palette=['#72b9b5','#7398d0','#c7a36b','#87939e'];
   function node(tag,text,cls){const el=document.createElement(tag);if(text!==undefined)el.textContent=text;if(cls)el.className=cls;return el;}
   function chart(title, labels, values, colors) {
@@ -31,7 +30,7 @@
       const divisor={GiB:1073741824,MiB:1048576,KiB:1024,B:1}[unit];
       const head=node('div',undefined,'library-storage');
       head.append(node('span','音频文件总大小'),node('strong',missing===songs.length&&missing?'未知':(bytes/divisor).toLocaleString(undefined,{maximumFractionDigits:2})+' '+unit),node('small',songs.length+' 首歌曲'+(missing?' · '+missing+' 首大小未知':'')));
-      this.replaceChildren(head,chart('歌词覆盖率',['有歌词','无歌词','未知'],lyrics,[palette[0],palette[2],palette[3]]),chart('音质分布',Object.values(qualityLabels),Object.values(quality),palette));
+      this.replaceChildren(head,chart('歌词覆盖率',['有歌词','无歌词','未知'],lyrics,[palette[0],palette[2],palette[3]]),chart('音质分布',Object.values(globalThis.lumeQualityLabels),Object.values(quality),palette));
     }
   }
   customElements.define('lume-library-report',LibraryReport);

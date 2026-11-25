@@ -23,6 +23,7 @@ try{for(const platform of ['Android','HarmonyOS']){
   const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
   await page.exposeFunction('fixtureRead',r=>r.kind==='audio'?files[r.id]?.subarray(r.offset,r.offset+r.length).toString('base64')||'':'');
   await page.addInitScript(()=>{
+    localStorage.setItem('lume-phone-round-cover','true');
     // Keep the home preview on the first fixture so the delayed next cover is cold.
     Math.random=()=>0;
     window.readDelays={};window.calls=[];
@@ -45,8 +46,19 @@ try{for(const platform of ['Android','HarmonyOS']){
   },{platform,sizes:Object.fromEntries(Object.entries(files).map(([id,data])=>[id,data.length]))});
   await page.waitForFunction(()=>artValues().every(v=>v.includes('data:image')));
   const first=await page.evaluate(()=>artValues());
+  await page.evaluate(()=>lumeUpdate({playing:true}));
+  const rotation=()=>page.evaluate(()=>getComputedStyle($('mini-art'),'::before').transform);
+  const startAngle=await rotation();
+  await page.waitForFunction(angle=>getComputedStyle($('mini-art'),'::before').transform!==angle,startAngle);
   await page.locator('#phone-dock .mini-track').click();await page.waitForTimeout(450);
   await page.locator('#phone-dock .mini-track').click();await page.waitForTimeout(450);
+  await page.evaluate(()=>lumeUpdate({playing:false}));
+  const pausedAngle=await rotation();
+  assert.equal(await page.evaluate(()=>getComputedStyle($('album'),'::before').transform),pausedAngle);
+  await page.evaluate(()=>player(false));await page.waitForTimeout(350);
+  assert.equal(await rotation(),pausedAngle,'closing while paused retains the angle');
+  await page.evaluate(()=>openPlayer());await page.waitForTimeout(400);
+  assert.equal(await page.evaluate(()=>getComputedStyle($('album'),'::before').transform),pausedAngle);
   await page.evaluate(()=>{
     readDelays.b=250;
     window.frames=[];window.record=true;
@@ -92,7 +104,7 @@ try{for(const platform of ['Android','HarmonyOS']){
     lumeUpdate({id:'remote-next',songs:[{id:'remote-next',title:'next'}]});
     lumeUpdate({roomDetails:{id:'remote',cover:'',lyrics:'stale'}});
   });
-  assert(await page.evaluate(()=>artValues().every(v=>v.includes(testCovers.a))),'wait for matching room detail packet');
+  assert(await page.evaluate(()=>artValues().every(v=>v.includes('gradient'))),'a pending remote song must not show the previous song artwork');
   await page.evaluate(()=>lumeUpdate({roomDetails:{id:'remote-next',cover:'',lyrics:''}}));
   assert(await page.evaluate(()=>artValues().every(v=>v.includes('gradient'))),'confirmed absent room cover clears old art');
   // Same ID from another source and rescans must invalidate in-flight reads.

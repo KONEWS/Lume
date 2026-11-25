@@ -9,4 +9,5 @@ import './music-sidebar.css';
 import '../mobile/player-assets/player/studio-theme.css';
 import './appearance/studio-desktop.css';
 ReactDOM.createRoot(document.getElementById('root')!).render(<React.StrictMode><App /></React.StrictMode>);
+import '../mobile/player-assets/player/listening-surface.css';
 import './appearance/playback-home.css';

@@ -33,7 +33,7 @@ for(const platform of ['Android','HarmonyOS'])test(`desktop independently prefer
   const bytes=await fs.readFile(new URL('./fixtures/channel-check.wav',import.meta.url)),audio=path.join(player.directory,'Renamed.wav'),words=path.join(player.directory,'Renamed.lrc');
   await fs.writeFile(audio,bytes);await fs.writeFile(words,'[00:01.00]LOCAL WORDS');
   const imported=await player.service.importLocal([audio],[words],{links:JSON.stringify([{lyrics:0}])});assert.equal(imported.imported,1);
-  const local=(await player.state()).tracks.find(t=>t.source==='import');phone.identity=identity(bytes);phone.details={cover:'',lyrics:'[00:01.00]HOST WORDS'};
+  const local=(await player.state()).tracks.find(t=>t.title==='Renamed');phone.identity=identity(bytes);phone.details={cover:'',lyrics:'[00:01.00]HOST WORDS'};
   await joined(player,phone);await until(async()=>(await player.state()).tracks.find(t=>t.id==='phone-a')?.localAudioKey===local.id);
   const read=await fetch(player.service.url+'/media/phone-a',{headers:{Range:'bytes=0-43'}});assert.equal(read.status,206);assert.deepEqual(Buffer.from(await read.arrayBuffer()),bytes.subarray(0,44));
   assert.equal(phone.requests.filter(r=>r.path.startsWith('/api/listen/')).length,0);
@@ -53,7 +53,7 @@ test('desktop host serves the same identity and timeline to local-capable and mi
  const player=await playerFixture();
  try{
   const bytes=await fs.readFile(new URL('./fixtures/channel-check.wav',import.meta.url)),file=path.join(player.directory,'host.wav');await fs.writeFile(file,bytes);await player.service.importLocal([file],[],{});
-  const song=(await player.state()).tracks.find(t=>t.source==='import');await player.act({type:'play',trackId:song.id});
+  const song=(await player.state()).tracks.find(t=>t.title==='host');await player.act({type:'play',trackId:song.id});
   const clients=[{id:'native-android-local-123456',platform:'Android',model:'Local candidate'},{id:'native-harmony-missing-123456',platform:'HarmonyOS',model:'No song'}];
   const poll=c=>player.request('/api/receiver',c).then(r=>{assert.equal(r.status,200);return r.data;});
   const first=await until(async()=>{const s=await poll(clients[0]);return s.audioIdentity&&s;});const second=await poll(clients[1]);

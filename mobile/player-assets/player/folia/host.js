@@ -11,6 +11,15 @@
       if (!localStorage.getItem('visualizer_background_mode')) localStorage.setItem('visualizer_background_mode','common');
       localStorage.setItem('lume-mobile-cover-background-v1','done');
     }
+    // These two layouts use 300/320px desktop line boxes. On a short phone
+    // viewport, their built-in overlap fit keeps long wrapped lyrics visible.
+    for (const key of ['classic_tuning','partita_tuning']) {
+      let stored;
+      try {stored=JSON.parse(localStorage.getItem(key));} catch {}
+      if (!stored || typeof stored !== 'object' || Array.isArray(stored)) stored={};
+      if (!Object.hasOwn(stored,'avoidOverlap'))
+        localStorage.setItem(key,JSON.stringify({...stored,avoidOverlap:true}));
+    }
   } catch {}
   const styles = {"classic":"流光","cadenza":"心象","partita":"云阶","fume":"浮名","monet":"莫奈","cappella":"群唱","tilt":"倾诉","claddagh":"回环","pendolo":"时计","diorama":"镜台","sonnet":"商籁","tempera":"凝彩","lumiere":"绘光","hanabi":"花火","machi":"町景","nebbia":"雾笺","metaphor":"隐喻","still":"静止"};
   if (mobile) delete styles.still;
@@ -56,6 +65,12 @@
     css.rel = 'stylesheet';
     css.href = new URL('stage.css',base);
     doc.head.append(css);
+    if (mobile) {
+      const mobileSpacing = doc.createElement('link');
+      mobileSpacing.rel = 'stylesheet';
+      mobileSpacing.href = new URL('mobile-spacing.css',base);
+      doc.head.append(mobileSpacing);
+    }
     const stage = doc.createElement('div');
     stage.id = 'stage';
     doc.body.append(stage);

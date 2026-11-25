@@ -9,9 +9,9 @@ cases=[('lyrics.mp3',['-c:a','libmp3lame','-metadata','lyrics=[00:00.00]Test lyr
        ('plain.mp3',['-c:a','libmp3lame','-id3v2_version','0'],'lossy',False),
        ('plain.aac',['-c:a','aac'],'lossy',False),
        ('lyrics.flac',['-c:a','flac','-metadata','lyrics=Test lyrics'],'lossless',True),
-       ('hires.flac',['-c:a','flac','-ar','96000','-sample_fmt','s32'],'hires',False),
+       ('hires.flac',['-c:a','flac','-ar','48000','-sample_fmt','s32'],'hires',False),
        ('plain.wav',['-c:a','pcm_s16le'],'lossless',False),
-       ('hires.wav',['-c:a','pcm_s24le','-ar','96000'],'hires',False),
+       ('hires.wav',['-c:a','pcm_s24le','-ar','48000'],'hires',False),
        ('lyrics.m4a',['-c:a','aac','-metadata','lyrics=Test lyrics'],'lossy',True),
        ('plain.m4a',['-c:a','alac'],'lossless',False),
        ('lyrics.ogg',['-c:a','libvorbis','-metadata','lyrics=Test lyrics'],'lossy',True),
@@ -28,7 +28,7 @@ def check(raw):
         assert facts['quality']==quality,(name,facts)
         assert facts['hasLyrics']==lyrics,(name,facts)
         assert facts['bytes']==(fixtures/name).stat().st_size,(name,facts)
-        assert facts['factsVersion']==2
+        assert facts['factsVersion']==3
     assert values[-1]['quality']=='unknown' and 'hasLyrics' not in values[-1]
     return [dict(file=f.name,facts=v) for f,v in zip(files,values)]
 if '--devices' not in sys.argv:

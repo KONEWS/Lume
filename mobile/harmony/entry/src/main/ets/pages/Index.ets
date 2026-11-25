@@ -1,12 +1,15 @@
+import { systemPlayback } from '../engine/SystemPlayback';
 import core from 'liblume.so';
-import { picker } from '@kit.CoreFileKit';
+import { picker, fileUri, fileIo as fs } from '@kit.CoreFileKit';
 import { PhoneSource } from '../engine/PhoneSource';
 import { window } from '@kit.ArkUI';
 import { audio, AVVolumePanel } from '@kit.AudioKit';
 import { webview } from '@kit.ArkWeb';
 import { common } from '@kit.AbilityKit';
 import { util } from '@kit.ArkTS';
-import { Receiver, Skin, Snapshot, phoneModel, Ticket, Peer, OutputPatch, TrackDetails, Completion, PlayRecord } from '../engine/Receiver';
+import { hilog } from '@kit.PerformanceAnalysisKit';
+import { Receiver, Skin, Snapshot, Ticket, Peer, OutputPatch, TrackDetails, Completion, PlayRecord } from '../engine/Receiver';
+import { phoneModel, setDeviceDisplayName } from '../engine/DeviceModel';
 import { LocalLibrary, Song } from '../engine/LocalLibrary';
 import { SongActions } from '../engine/SongActions';
 import { DiscoverySession, Space } from '../engine/Discovery';
@@ -20,13 +23,16 @@ PersistentStorage.persistProp('playbackShuffle',false);
 PersistentStorage.persistProp('playbackMode','');
 PersistentStorage.persistProp('landscapeAwake',false);
 if(!AppStorage.has('lumeForeground'))AppStorage.setOrCreate('lumeForeground',false);
-interface Invitation {url?:string;name?:string;inviteToken?:string;deviceId?:string}
+interface Invitation {switchHost?:boolean;offerId?:string;url?:string;name?:string;inviteToken?:string;deviceId?:string;listenerError?:number}
 interface NearbyPhone {id:string;platform:string;model:string;address:string}
 interface SafeInsets {top:number;right:number;bottom:number;left:number}
-interface HostInfo {nearbyPhones?:NearbyPhone[];phoneSearching?:boolean;inviteStatus?:string;pin?:string; address?:string; port?:number; pending?:Ticket[]; outputs?:Peer[];error?:string}
-interface Action { inviteToken?:string;deviceId?:string;mode?:string;delta?:number; blocked?:string[]; blockedFormats?:string[]; skipShort?:boolean; token?:number; kind?:string; offset?:number; length?:number; patch?:OutputPatch; order?:string[]; type:string; id?:string; url?:string; pin?:string; seconds?:number; enabled?:boolean; lyrics?:boolean; dark?:boolean; value?:boolean; channel?:string; delayMs?:number }
+interface HostInfo {coverRevision?:string;coverRequests?:string[];nearbyPhones?:NearbyPhone[];phoneSearching?:boolean;inviteStatus?:string;pin?:string; address?:string; port?:number; pending?:Ticket[]; outputs?:Peer[];error?:string}
+interface ReceivedFile {file:string;title:string;ext:string;key:string}
+interface PersonalResult {originDeviceName?:string;files?:ReceivedFile[];songs?:Song[];error?:string;selection?:string;name?:string}
+interface Action {visible?:string;offerId?:string;status?:string;displayName?:string;revision?:string;favoriteKeys?:string[];op?:string;peer?:string;key?:string;address?:string; inviteToken?:string;deviceId?:string;mode?:string;delta?:number; blocked?:string[]; blockedFormats?:string[]; skipShort?:boolean; token?:number; kind?:string; offset?:number; length?:number; patch?:OutputPatch; order?:string[]; type:string; id?:string; url?:string; pin?:string; seconds?:number; enabled?:boolean; lyrics?:boolean; dark?:boolean; value?:boolean; channel?:string; delayMs?:number }
 interface Update { platform?:string;roomDetails?:TrackDetails|null;completion?:Completion;playRecords?:PlayRecord[];
-  localSong?:Song|null;localTrackId?:string;
+  coverRevision?:string;coverRequests?:string[];coverLibrary?:Song[];
+  localSong?:Song|null;localTrackId?:string;hostAddress?:string;
   nearbyPhones?:NearbyPhone[];phoneSearching?:boolean;inviteStatus?:string;
   landscapeAwake?:boolean;
   searching?:boolean;
@@ -35,7 +41,7 @@ interface Update { platform?:string;roomDetails?:TrackDetails|null;completion?:C
   order?:string[];
   playMode?:string;shuffle?:boolean;
   shuffleAvailable?:boolean;
-  counts?:Record<string,number>; scanTotal?:number; scanDone?:number; scanFound?:number;
+  counts?:Record<string,number>; scanTotal?:number; scanTotalKnown?:boolean; scanDone?:number; scanFound?:number;
   scanStatus?:string; scanning?:boolean; scanPaused?:boolean;
   model?:string;
   hosting?:boolean; creating?:boolean; hostError?:string; hostPin?:string; address?:string; pending?:Ticket[]; outputs?:Peer[]; delayMs?:number;
@@ -69,6 +75,8 @@ struct Index {
   private pendingHostSelection:string='';
   private joining:boolean=false;
   private listening:boolean=false;
+  private listenerState:string='';
+  private waitingInvite?:Invitation;
   private memberView:string='';
   private hostView:string='';
   private disposed:boolean=false;
@@ -78,6 +86,14 @@ struct Index {
   @StorageLink('lumeProfile') profile:string='';
   private controller:webview.WebviewController = new webview.WebviewController();
   private ready:boolean=false;
+  @StorageLink('widgetPlayerPending') @Watch('consumeWidgetRoute') widgetPlayerPending:boolean=false;
+  @State widgetStarting:boolean=false;
+  private consumeWidgetRoute():void {
+    if(!this.widgetPlayerPending || this.disposed)return;
+    if(!this.ready){this.widgetStarting=true;return;}
+    this.widgetPlayerPending=false;
+    this.controller.runJavaScript('window.lumeOpenWidgetPlayer()').finally(()=>{this.widgetStarting=false;}).catch(()=>{});
+  }
   private canBack:boolean=false;
   private styleWindowWork:Promise<void>=Promise.resolve();
   private playerIsFullscreen:boolean=false;
@@ -154,6 +170,7 @@ struct Index {
   }
   private foregroundChanged():void {
     this.syncKeepAwake();
+    this.checkNearby();
     if(this.foreground)this.syncPlayerWindow(true);
   }
   private syncPlayerWindow(force:boolean=false):void {
@@ -202,6 +219,7 @@ struct Index {
   private songRevision:number=-1;
   private scanHistoryRevision:number=-1;
   private lastPlay:string='';
+  private lastPosition:number=-1;
   private bridge:PlayerBridge=new PlayerBridge((message:string)=>{
     let action:Action;
     try { action=JSON.parse(message) as Action; } catch { return; }
@@ -225,10 +243,11 @@ struct Index {
   },(s:Snapshot)=>{
     const first=!this.joined;
     this.joining=false;this.joined=true;this.snapshot=s;
+    if(first)this.checkNearby();
     this.setRoute(s.channel,s.delayMs);
     this.showMembers(s);
     if(s.catalog)this.catalog=s.catalog;
-    if(first || s.catalog)this.send({joined:true,host:this.hosting?'本机空间':this.host,songs:this.catalog});
+    if(first || s.catalog)this.send({joined:true,host:this.hosting?'本机空间':this.host,hostAddress:s.hostAddress??'',songs:this.catalog});
     this.playback();
     if(first&&this.hosting&&this.pendingHostSelection){
       const id=this.pendingHostSelection;this.pendingHostSelection='';
@@ -239,8 +258,22 @@ struct Index {
 
   aboutToAppear(){
     this.disposed=false;this.bindWindow();
+    this.checkNearby();
+    this.widgetStarting=this.widgetPlayerPending;
     if(!this.profile)this.profile=util.generateRandomUUID();
-    this.local=new LocalLibrary(this.getUIContext().getHostContext() as common.UIAbilityContext,()=>this.localChanged());
+    this.local=systemPlayback.getLibrary();
+    const identity=JSON.parse(core.room('{"type":"deviceIdentity"}')) as PersonalResult;
+    if(identity.originDeviceName)setDeviceDisplayName(identity.originDeviceName);
+    systemPlayback.pageFavorites=(keys:string[])=>{
+      if(this.ready)this.controller.runJavaScript('window.lumeFavoriteState&&window.lumeFavoriteState('+JSON.stringify(keys)+')').catch(()=>{});
+    };
+    systemPlayback.pageChanged=()=>this.localChanged();
+    systemPlayback.pageControl=(action:string)=>{
+      if(action==='play'||action==='pause'){
+        const active=this.snapshot?this.snapshot.roomPlaying:this.local?.player?.state==='playing';
+        if((action==='play')!==active)this.handle({type:'toggle'});
+      }else this.handle({type:action});
+    };
     if(!this.localMode)this.localMode=this.localShuffle?'shuffle':'sequence';
     this.local.playMode=this.localMode;this.local.shuffle=this.localMode==='shuffle';
     this.local.fillLegacyFacts().catch(()=>{});
@@ -249,13 +282,20 @@ struct Index {
     this.search();this.timer=setInterval(()=>{this.checkNearby();if(!this.joined)this.playback();if(this.hosting)this.showHost();},350);
   }
   checkNearby():void {
-    if(this.ready&&!this.disposed&&!this.joined&&!this.joining&&!this.creating&&!this.hosting){
-      const reply:string=core.room(JSON.stringify({type:'nearby',platform:'HarmonyOS',model:phoneModel}));
+    if(!this.disposed&&this.foreground){
+      const availability=this.hosting?'hosting':this.creating||this.joining?'connecting':this.joined?'joined':'available';
+      const reply:string=core.room(JSON.stringify({type:'nearby',platform:'HarmonyOS',model:phoneModel,availability:availability}));
       this.listening=true;
       const invite=JSON.parse(reply) as Invitation;
-      if(invite.url)this.controller.runJavaScript('window.lumeInvite('+JSON.stringify(invite)+')').catch(()=>{});
+      const status=invite.listenerError?'bind error '+invite.listenerError:availability;
+      if(this.listenerState!==status){this.listenerState=status;hilog.info(0x0000,'LumeNearby','Invitation listener %{public}s',status);}
+      if(invite.url)this.waitingInvite=invite;
+      if(this.ready&&this.waitingInvite){
+        if(availability==='available'||availability==='hosting')this.controller.runJavaScript('window.lumeInvite('+JSON.stringify(this.waitingInvite)+')').catch(()=>{});
+        this.waitingInvite=undefined;
+      }
     }else if(this.listening){
-      core.room('{"type":"nearbyStop"}');this.listening=false;
+      core.room('{"type":"nearbyStop"}');this.listening=false;this.listenerState='';this.waitingInvite=undefined;
     }
   }
   aboutToDisappear(){
@@ -266,7 +306,7 @@ struct Index {
     try{this.mainWindow?.off('windowSizeChange',this.windowSizeChanged);}catch{}
     try{this.mainWindow?.off('windowEvent',this.windowEventChanged);}catch{}
     this.mainWindow=undefined;this.lastInsets='';
-    this.local?.pauseImport(false);this.disposed=true;this.checkNearby();this.ready=false;if(this.hosting)core.room('{"type":"stop"}');this.scan++;clearInterval(this.timer);this.receiver.stop();this.local?.stop();
+    this.local?.stopScan();this.checkNearby();this.ready=false;if(this.hosting)core.room('{"type":"stop"}');this.scan++;clearInterval(this.timer);this.receiver.stop();systemPlayback.pageChanged=undefined;systemPlayback.pageControl=undefined;systemPlayback.pageFavorites=undefined;systemPlayback.update(undefined,0);
   }
   onBackPress():boolean {
     if(!this.canBack)return false;
@@ -277,35 +317,43 @@ struct Index {
     if(this.ready)this.controller.runJavaScript('window.lumeUpdate('+JSON.stringify(data)+')').catch(()=>{});
   }
   playback():void {
+    if(this.disposed)return;
+    systemPlayback.update(this.snapshot,this.snapshot?this.receiver.playbackPosition():0,this.hosting?'本机空间':this.host);
     this.local?.samplePlayback();
     this.syncKeepAwake();
     const s=this.snapshot,p=this.local?.player,song=this.local?.songs[this.local.index];
     const data:Update={
-      playRecords:s?s.playRecords:(JSON.parse(core.room('{"type":"historyRecords"}')) as Record<string,PlayRecord[]>).records,
+      playRecords:(JSON.parse(core.room(JSON.stringify({type:'historyRecords',current:s?.currentSession??'',playing:s?.roomPlaying??false,rows:s?.playRecords??[]}))) as Record<string,PlayRecord[]>).records,
       roomDetails:s?.roomDetails??null,localSong:s?.localSong??null,localTrackId:s?.localTrackId??'',completion:s?s.completion:JSON.parse(core.room('{"type":"historyEvent"}')) as Completion,
       id:s?s.trackId:song?.hidden?'':song?.id??'',title:s?s.roomTrack:song?.hidden?'':song?.title??'',
       playing:s?s.roomPlaying:p?.state==='playing',duration:s?s.duration:Math.max(0,p?.duration??0)/1000,
       playMode:s?s.playMode??(s.shuffle?'shuffle':'sequence'):this.localMode,
       shuffle:s?s.shuffle??false:this.localMode==='shuffle',
       shuffleAvailable:!s||typeof s.shuffle==='boolean',
-      pos:s?this.receiver.playbackPosition():Math.max(0,p?.currentTime??0)/1000,error:s?s.roomError??'':this.local?.error??''
+      error:s?s.roomError??'':this.local?.error??''
     };
+    const pos=s?this.receiver.playbackPosition():Math.max(0,p?.currentTime??0)/1000;
     const key=JSON.stringify(data);
-    if(key!==this.lastPlay){this.lastPlay=key;this.send(data);}
+    if(key!==this.lastPlay){
+      this.lastPlay=key;data.pos=pos;this.send(data);
+    }else if(pos!==this.lastPosition){
+      this.send({pos:pos});
+    }
+    this.lastPosition=pos;
   }
   localChanged():void {
     if(!this.local)return;
     if(this.scanHistoryRevision!==this.local.historyRevision){
       this.scanHistoryRevision=this.local.historyRevision;this.send({scanHistory:this.local.scanHistory});
     }
-    this.send({order:this.local.order,counts:this.local.counts,scanTotal:this.local.scanTotal,scanDone:this.local.scanDone,scanFound:this.local.scanFound,scanStatus:this.local.scanStatus,scanning:this.local.scanning,scanPaused:this.local.paused});
+    this.send({order:this.local.order,counts:this.local.counts,scanTotal:this.local.scanTotal,scanTotalKnown:this.local.scanTotalKnown,scanDone:this.local.scanDone,scanFound:this.local.scanFound,scanStatus:this.local.scanStatus,scanning:this.local.scanning,scanPaused:false});
     if(this.joined)return;
     if(this.songCount!==this.local.songs.length||this.songRevision!==this.local.revision){this.songRevision=this.local.revision;this.songCount=this.local.songs.length;this.send({songs:this.local.songs});}
     this.playback();
   }
   reset(status:string):void {
     this.memberView='';this.send({outputs:[],pending:[],selfId:''});
-    this.joining=false;this.joined=false;this.snapshot=undefined;this.theme=undefined;this.channel='';this.status=status;
+    this.joining=false;this.joined=false;this.snapshot=undefined;this.theme=undefined;this.channel='';this.status=status;this.checkNearby();
     this.local?.reloadCounts();this.send({joined:false,counts:this.local?.counts,order:this.local?.order??[],songs:this.local?.songs??[],status:status,channel:'',skin:null});this.playback();
   }
   stopSearch():void {
@@ -320,9 +368,13 @@ struct Index {
     this.spaces=[];this.searching=true;this.status='正在搜索附近空间 · 30 秒后停止';
     this.send({hosts:this.spaces,status:this.status,searching:true});
     this.discovery=new DiscoverySession(this.host,(space:Space)=>{
-      if(run===this.scan&&!this.spaces.some((s:Space)=>s.url===space.url)){
-        this.spaces.push(space);this.send({hosts:this.spaces});
-      }
+      if(run!==this.scan)return;
+      const stable=!!space.roomId;
+      const index=this.spaces.findIndex((s:Space)=>s.url===space.url||(stable&&s.roomId===space.roomId));
+      if(index<0)this.spaces.push(space);
+      else if(!this.spaces[index].live&&space.live)this.spaces[index]=space;
+      else return;
+      this.send({hosts:this.spaces});
     });
     await this.discovery.done.catch(()=>{});
     if(run!==this.scan||this.disposed)return;
@@ -353,26 +405,32 @@ struct Index {
     const info=JSON.parse(core.room('{"type":"status"}')) as HostInfo;
 
     const update:Update={hosting:true,hostPin:info.pin,address:info.address,nearbyPhones:info.nearbyPhones,phoneSearching:info.phoneSearching,inviteStatus:info.inviteStatus};
-    const key=JSON.stringify(update);if(key!==this.hostView){this.hostView=key;this.send(update);}
+    update.coverRevision=info.coverRevision;update.coverRequests=info.coverRequests;
+    const key=JSON.stringify(update);if(key!==this.hostView){
+      if(!this.hostView||this.hostCoverRevision!==info.coverRevision)update.coverLibrary=this.local?.songs;
+      this.hostCoverRevision=info.coverRevision;this.hostView=key;this.send(update);
+    }
   }
+  private hostCoverRevision?:string;
   async createHost():Promise<void>{
     if(this.creating||this.hosting||this.joined||!this.local)return;
     this.stopSearch();
     this.creating=true;this.hostError='';this.pendingHostSelection='';this.status='正在创建空间';
+    this.checkNearby();
     this.send({creating:true,hostError:'',status:this.status});
     try{
       await this.local.stop();const songs=await this.local.hostSongs();
       if(this.disposed)return;
       const info=JSON.parse(core.room(JSON.stringify({type:'start',name:phoneModel+' 的播放空间',songs:songs,shuffle:this.localShuffle,playMode:this.localMode}))) as HostInfo;
       if(!info.pin)throw new Error(info.error??'无法创建空间');
-      this.scan++;this.hosting=true;this.syncKeepAwake();this.hostView='';this.showHost();
+      this.scan++;this.hosting=true;this.checkNearby();this.syncKeepAwake();this.hostView='';this.showHost();
       await this.receiver.connect('http://127.0.0.1:'+info.port,info.pin,this.profile);
     }catch(e){
       this.pendingHostSelection='';
       this.hostError=(e as Error).message||'未能创建空间，请重试';
       this.send({hostError:this.hostError,error:this.hostError});
     }finally{
-      this.creating=false;
+      this.creating=false;this.checkNearby();
       this.send({creating:false,hosting:this.hosting,hostError:this.hostError});
     }
   }
@@ -381,12 +439,67 @@ struct Index {
     await this.local.pick(folderMode,skipShort,blocked,blockedFormats,rescan);
     if(this.hosting)core.room(JSON.stringify({type:'update',songs:await this.local.hostSongs()}));
   }
+  private preparingInvite:boolean=false;
+  private async acceptRoomInvite(offerId:string):Promise<void>{
+    if(this.preparingInvite||this.joining||this.creating)return;
+    const offer=JSON.parse(core.room(JSON.stringify({type:'inviteFeedback',offerId:offerId,status:'accept'}))) as Invitation;
+    if(!offer.url||!!offer.switchHost!==this.hosting){this.send({error:'邀请已失效，请让房主重新邀请'});return;}
+    if(!this.hosting){await this.join(offer.url,'',offer.inviteToken,offer.deviceId);return;}
+    const generation=this.scan;this.preparingInvite=true;
+    try{
+      const ready=await this.receiver.prepareInvite(offer.url,offer.inviteToken??'',offer.deviceId??'');
+      if(this.disposed||generation!==this.scan||!this.hosting)return;
+      this.receiver.stop();core.room('{"type":"stop"}');this.hosting=false;this.hostView='';
+      this.send({hosting:false,outputs:[],pending:[]});this.reset('');this.stopSearch();
+      this.joining=true;this.checkNearby();this.host=offer.url;this.send({host:this.host,savedHost:this.host});
+      await this.receiver.connect(this.host,'',this.profile,'','',ready);
+    }catch(e){this.send({error:'未能连接受邀空间，请重新邀请'});}
+    finally{this.preparingInvite=false;}
+  }
   async join(url:string,pin:string,inviteToken:string='',deviceId:string=''):Promise<void>{
     if(this.creating||this.hosting||this.joined||this.joining)return;
-    this.joining=true;
+    this.joining=true;this.checkNearby();
     this.stopSearch();
     if(this.local)await this.local.stop();
     this.joining=true;this.scan++;this.host=url;this.send({host:url,savedHost:url});await this.receiver.connect(url,pin,this.profile,inviteToken,deviceId);
+  }
+  private transferUri:string='';
+  private transferName:string='';
+  private transferId:string='';
+  private async personal(a:Action):Promise<void>{
+    if(!this.local)return;
+    let result:PersonalResult={};
+    try{
+      if(a.op==='pickFile'){
+        const opts=new picker.DocumentSelectOptions();
+        opts.maxSelectNumber=1;opts.selectMode=picker.DocumentSelectMode.FILE;
+        opts.fileSuffixFilters=['音频|.mp3,.wav,.flac,.m4a,.aac,.ogg,.opus,.webm,.mp4'];
+        const ctx=this.getUIContext().getHostContext() as common.UIAbilityContext;
+        const uris=await new picker.DocumentViewPicker(ctx).select(opts);
+        if(uris.length){this.transferUri=uris[0];this.transferName=new fileUri.FileUri(uris[0]).name;
+          this.transferId=util.generateRandomUUID();result={selection:this.transferId,name:this.transferName};}
+      }else if(a.op==='offerFile'){
+        if(!this.transferUri||a.id!==this.transferId)throw new Error('请重新选择歌曲');
+        const dot=this.transferName.lastIndexOf('.');
+        const fd=fs.openSync(this.transferUri,fs.OpenMode.READ_ONLY);
+        try{result=JSON.parse(core.room(JSON.stringify({type:'personal',op:'offer',peer:a.peer,path:'/proc/self/fd/'+fd.fd,
+          title:dot>0?this.transferName.slice(0,dot):this.transferName,ext:this.transferName.slice(dot+1).toLowerCase()}))) as PersonalResult;}
+        finally{fs.closeSync(fd);}
+      }else if(a.op==='offer'){
+        const song=this.local.songs.find((s:Song)=>s.id===a.id&&!s.hidden);
+        if(!song)throw new Error('请选择本机歌曲');
+        const ctx=this.getUIContext().getHostContext() as common.UIAbilityContext;
+        result=JSON.parse(core.room(JSON.stringify({type:'personal',op:'offer',peer:a.peer,
+          path:ctx.filesDir+'/'+song.id,title:song.title,ext:(song.fileName??'').split('.').pop()?.toLowerCase()??''}))) as PersonalResult;
+      }else if(a.op==='library')result.songs=this.local.songs;
+      else if(['status','rename','checkName','trust','approvePair','rejectPair','forget','accept','decline','find'].includes(a.op??''))result=JSON.parse(core.room(JSON.stringify(a))) as PersonalResult;
+      if(a.op==='rename'&&result.name&&!result.error){setDeviceDisplayName(result.name);this.send({model:phoneModel});}
+      if(!this.local.scanning)for(const file of result.files??[]){
+        this.local.receivePersonal(file.file,file.title,file.ext);
+        core.room(JSON.stringify({type:'personal',op:'imported',key:file.key}));
+      }
+    }catch(e){result.error=(e as Error).message;}
+    this.controller.runJavaScript('window.lumePersonalReply('+a.token+','+JSON.stringify(result)+')').catch(()=>{});
   }
   handle(a:Action):void{
     // A host connects to its own room asynchronously. Never start private local
@@ -429,26 +542,37 @@ struct Index {
         this.mediaPanelLevel=Math.max(this.volumeMin,Math.min(this.volumeMax,level));
         break;
       }
-      case 'trackDetails':if(this.hosting)core.room(JSON.stringify(a));break;
+      case 'catalogThumbnail':case 'trackDetails':if(this.hosting)core.room(JSON.stringify(a));break;
       case 'systemBarAppearance':this.systemBarAppearance(a.dark??false);break;
       case 'playerSession':this.playerSession(a.enabled??false,a.lyrics??false);break;
       case 'backState':this.canBack=a.enabled??false;break;
+      case 'personal':this.personal(a);return;
+      case 'favoriteSet':systemPlayback.setFavorite(a.key??'',a.enabled===true);break;
       case 'ready':
         this.playerSession(false);
-        this.ready=true;this.lastPlay='';this.memberView='';if(this.snapshot)this.showMembers(this.snapshot);if(this.hosting){this.hostView='';this.showHost();}
+        this.ready=true;systemPlayback.importFavorites(a.favoriteKeys);this.lastPlay='';this.memberView='';if(this.snapshot)this.showMembers(this.snapshot);if(this.hosting){this.hostView='';this.showHost();}
         this.lastInsets='';this.sendInsets();
-        this.send({platform:'HarmonyOS',landscapeAwake:this.landscapeAwake,searching:this.searching,creating:this.creating,hosting:this.hosting,hostError:this.hostError,scanHistory:this.local?.scanHistory,model:phoneModel,counts:this.local?.counts,order:this.local?.order??[],joined:this.joined,savedHost:this.host,host:this.host,hosts:this.spaces,status:this.status,
+        const initialSong=this.local?.songs[this.local.index];
+        this.send({id:this.snapshot?this.snapshot.trackId:initialSong?.hidden?'':initialSong?.id??'',
+          title:this.snapshot?this.snapshot.roomTrack:initialSong?.hidden?'':initialSong?.title??'',
+          playing:this.snapshot?this.snapshot.roomPlaying:this.local?.player?.state==='playing',
+          platform:'HarmonyOS',landscapeAwake:this.landscapeAwake,searching:this.searching,creating:this.creating,hosting:this.hosting,hostError:this.hostError,scanHistory:this.local?.scanHistory,model:phoneModel,counts:this.local?.counts,order:this.local?.order??[],joined:this.joined,savedHost:this.host,host:this.hosting?'本机空间':this.host,hosts:this.spaces,status:this.status,
           skin:this.theme??null,channel:this.channel,songs:this.joined?this.catalog:this.local?.songs??[]});
-        this.playback();break;
+        this.playback();
+        if(this.widgetPlayerPending)this.consumeWidgetRoute();else this.widgetStarting=false;
+        break;
       case 'createHost':this.createHost();break;
       case 'decide':if(this.joined)this.receiver.command(JSON.stringify({type:a.enabled?'join-allow':'join-deny',value:a.id}));break;
       case 'output':if(this.joined&&a.patch)this.receiver.command(JSON.stringify({type:'output',id:a.id,patch:a.patch}));break;
       case 'search':this.search();break;
       case 'landscapeAwake':this.landscapeAwake=!!a.enabled;this.syncKeepAwake();this.send({landscapeAwake:this.landscapeAwake});break;
       case 'searchPhones':case 'invitePhone':if(this.hosting){core.room(JSON.stringify(a));this.showHost();}break;
+      case 'phoneSearchStatus':this.checkNearby();if(this.hosting)this.showHost();break;
+      case 'inviteFeedback':core.room(JSON.stringify(a));break;
+      case 'acceptRoomInvite':this.acceptRoomInvite(a.offerId??'');break;
       case 'join':this.join(a.url??'',a.pin??'',a.inviteToken??'',a.deviceId??'');break;
       case 'leave':this.receiver.stop();this.hostError='';this.pendingHostSelection='';if(this.hosting){core.room('{"type":"stop"}');this.hosting=false;this.syncKeepAwake();this.send({hosting:false,hostError:'',pending:[],outputs:[]});}this.reset('已离开空间');break;
-      case 'pauseImport':this.local?.pauseImport(a.enabled??false);break;
+      case 'pauseImport':case 'stopScan':this.local?.stopScan();break;
       case 'songNext':case 'songShare':case 'songHide':case 'songDelete':case 'songRestore':{
         const token=a.token??0;
         if(this.joined||!this.local){this.songResult(token,false,'请先离开播放空间');break;}
@@ -459,7 +583,8 @@ struct Index {
       case 'detailRead':{
         const token=a.token??0;
         if(!Number.isSafeInteger(token))break;
-        this.local?.detailBytes(a.id??'',a.kind??'',a.offset??0,a.length??0).catch(()=>'').then(bytes=>{
+        const read=a.kind==='roomCover'?this.receiver.catalogCover(a.id??'',a.revision??'',a.visible??''):this.local?.detailBytes(a.id??'',a.kind??'',a.offset??0,a.length??0);
+        read?.catch(()=>'').then(bytes=>{
           if(!this.disposed)this.controller.runJavaScript('window.lumeReadResult('+token+','+JSON.stringify(bytes)+')').catch(()=>{});
         });
         break;
@@ -497,7 +622,8 @@ struct Index {
     Stack(){
       AVVolumePanel({volumeLevel:this.mediaPanelLevel})
       Web({src:$rawfile('player/index.html'),controller:this.controller})
-      .width('100%').height('100%').backgroundColor('#10121E').javaScriptAccess(true).domStorageAccess(true)
+      .opacity(this.widgetStarting?0:1)
+      .width('100%').height('100%').backgroundColor($r('app.color.launch')).javaScriptAccess(true).domStorageAccess(true)
       .expandSafeArea([SafeAreaType.SYSTEM,SafeAreaType.CUTOUT],[SafeAreaEdge.TOP,SafeAreaEdge.BOTTOM,SafeAreaEdge.START,SafeAreaEdge.END])
       .javaScriptProxy({object:this.bridge,name:'LumeNative',methodList:['dispatch'],controller:this.controller})
       .onShowFileSelector((event)=>{
@@ -512,7 +638,7 @@ struct Index {
         const url=event.data.getRequestUrl();
         return !(url.startsWith('resource://') || url.startsWith('file:///') && url.endsWith('/player/index.html'));
       })
-    }.height('100%').width('100%').backgroundColor('#10121E')
+    }.height('100%').width('100%').backgroundColor($r('app.color.launch'))
     .expandSafeArea([SafeAreaType.SYSTEM,SafeAreaType.CUTOUT],[SafeAreaEdge.TOP,SafeAreaEdge.BOTTOM,SafeAreaEdge.START,SafeAreaEdge.END])
   }
 }

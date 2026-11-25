@@ -19,8 +19,8 @@ final class PcmOutput {
         Source(String url,String cookie){this.url=url;this.cookie=cookie;}
     }
     static final class Clock {
-        final Source source;final boolean playing;final double start,volume,duration;
-        Clock(Source s,boolean p,double start,double volume,double duration){source=s;playing=p;this.start=start;this.volume=volume;this.duration=duration;}
+        final Source source;final boolean playing;final double start,volume,duration;final int trimFrames;
+        Clock(Source s,boolean p,double start,double volume,double duration,int delayMs){trimFrames=delayMs*(RATE/1000);source=s;playing=p;this.start=start;this.volume=volume;this.duration=duration;}
     }
     volatile Clock clock;
     volatile boolean closed;
@@ -31,8 +31,8 @@ final class PcmOutput {
         Clock prev=clock;
         Source s=prev!=null&&prev.source.url.equals(path)?prev.source:new Source(path,cookie);
         s.local=local;s.channel=channel;
-        double start=sampleTime-position*1000+delay;
-        clock=new Clock(s,playing,start,volume,duration);
+        double start=sampleTime-position*1000;
+        clock=new Clock(s,playing,start,volume,duration,delay);
         int first=Math.max(0,(int)Math.floor((position-delay/1000.0-.16)/4));
         for(Integer key:s.blocks.keySet())if(key<first-1||key>first+4)s.blocks.remove(key);
         int end=first;while(s.blocks.containsKey(end))end++;ahead=Math.max(0,(int)((Math.min(duration,end*4)-position)*1000));
@@ -100,11 +100,12 @@ final class PcmOutput {
                     double speed=1+Math.max(-.04,Math.min(.04,Math.abs(err)<32?0:err/24000.0));
                     boolean missing=false;short[] data=null;int key=-1;
                     for(int i=0;i<FRAMES;i++,cursor+=speed){
-                        if(cursor<0 || cursor>=c.duration*RATE)continue;
-                        int frame=(int)(cursor%BLOCK),n=(int)(cursor/BLOCK);
+                        double sample=cursor-c.trimFrames;
+                        if(sample<0 || sample>=c.duration*RATE)continue;
+                        int frame=(int)(sample%BLOCK),n=(int)(sample/BLOCK);
                         if(n!=key){key=n;data=c.source.blocks.get(n);}
                         if(data==null){missing=true;continue;}int at=frame*2;if(at+1>=data.length)continue;
-                        heard=true;double frac=cursor-Math.floor(cursor);
+                        heard=true;double frac=sample-Math.floor(sample);
                         int next=at+3<data.length?at+2:at;
                         for(int ch=0;ch<2;ch++)out[2*i+ch]=(short)((data[at+ch]+(data[next+ch]-data[at+ch])*frac)*c.volume);
                     }

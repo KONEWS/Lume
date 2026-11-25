@@ -1,0 +1,5 @@
+/* A short crossfade connects palettes when the next cover becomes available. */
+::view-transition-old(root),::view-transition-new(root) { animation-duration:260ms;animation-timing-function:ease-in-out }
+@media (prefers-reduced-motion:reduce) {
+  ::view-transition-old(root),::view-transition-new(root) { animation-duration:0s }
+}

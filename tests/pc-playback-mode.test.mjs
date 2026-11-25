@@ -7,9 +7,9 @@ import {startServer} from '../server/index.mjs';
 
 async function fixture() {
   const directory=await fs.mkdtemp(path.join(os.tmpdir(),'lume-pc-modes-'));
-  const resourcesDir=path.join(directory,'resources'),demoDir=path.join(resourcesDir,'demo');
+  const resourcesDir=path.join(directory,'resources'),mediaDir=path.join(directory,'data','media');
   const staticDir=path.join(directory,'dist'),dataDir=path.join(directory,'data');
-  await fs.mkdir(demoDir,{recursive:true});await fs.mkdir(staticDir,{recursive:true});
+  await fs.mkdir(mediaDir,{recursive:true});await fs.mkdir(staticDir,{recursive:true});
   await fs.writeFile(path.join(staticDir,'index.html'),'<html>PC mode test</html>');
   const ids=['a','b','c'];
   const wav=Buffer.alloc(44+8000*6*2);
@@ -17,10 +17,10 @@ async function fixture() {
   wav.writeUInt32LE(16,16);wav.writeUInt16LE(1,20);wav.writeUInt16LE(1,22);
   wav.writeUInt32LE(8000,24);wav.writeUInt32LE(16000,28);wav.writeUInt16LE(2,32);wav.writeUInt16LE(16,34);
   wav.write('data',36);wav.writeUInt32LE(wav.length-44,40);
-  for(const id of ids)await fs.writeFile(path.join(demoDir,id+'.wav'),wav);
-  await fs.writeFile(path.join(demoDir,'manifest.json'),JSON.stringify(ids.map(id=>({
-    id,title:id,artist:'LUME',album:'PC playback modes',duration:6,format:'WAV',file:id+'.wav',artwork:'/covers/1.svg'
-  }))));
+  for(const id of ids)await fs.writeFile(path.join(mediaDir,id+'.wav'),wav);
+  await fs.writeFile(path.join(dataDir,'library.json'),JSON.stringify({tracks:ids.map(id=>({
+    source:'import',id,title:id,artist:'LUME',album:'PC playback modes',duration:6,format:'WAV',file:id+'.wav',artwork:'/covers/1.svg'
+  }))}));
   const config={port:0,host:'127.0.0.1',resourcesDir,staticDir,dataDir};
   let server=await startServer(config);
   async function request(route,body) {

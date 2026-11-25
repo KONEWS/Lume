@@ -1,5 +1,5 @@
 // Each connected device owns its controls; updates preserve the field being edited.
-function createOutputControls(root,send){
+function createOutputControls(root,send,editName){
   const cards=new Map();
   return (outputs,selfId)=>{
     const members=outputs||[];root.hidden=!members.length;
@@ -25,9 +25,22 @@ function createOutputControls(root,send){
             <label>参与播放<input data-key="enabled" type="checkbox"></label>
           </details>`;
         for(const input of card.querySelectorAll('[data-key]')){
-          input.oninput=()=>{card.editing=input;if(input.dataset.key==='volume')card.querySelector('output').textContent=input.value+'%';};
+          let timer,lastTrim;
+          const submitTrim=()=>{
+            clearTimeout(timer);
+            if(!card.isConnected||!input.value||!input.checkValidity())return;
+            const delayMs=input.valueAsNumber;
+            if(delayMs!==lastTrim){lastTrim=delayMs;send(device.id,{delayMs});}
+          };
+          input.onfocus=()=>{lastTrim=Number(input.value);};
+          input.oninput=()=>{
+            card.editing=input;
+            if(input.dataset.key==='volume')card.querySelector('output').textContent=input.value+'%';
+            if(input.dataset.key==='delayMs'){clearTimeout(timer);timer=setTimeout(submitTrim,80);}
+          };
           input.onchange=()=>{
             card.editing=null;if(!input.checkValidity()||input.value==='')return;
+            if(input.dataset.key==='delayMs'){submitTrim();return;}
             const key=input.dataset.key,value=input.type==='checkbox'?input.checked:key==='channel'?input.value:key==='volume'?Number(input.value)/100:Number(input.value);
             send(device.id,{[key]:value});
           };
@@ -36,7 +49,13 @@ function createOutputControls(root,send){
         cards.set(device.id,card);root.append(card);
       }
       const name=device.name||device.model||device.platform||'播放设备';
-      card.querySelector('h3').textContent=(device.id===selfId?'本机 · ':'')+name;
+      const heading=card.querySelector('h3');
+      if(device.id===selfId&&editName){
+        let edit=heading.querySelector('button');
+        if(!edit){edit=document.createElement('button');edit.type='button';edit.className='self-name-row';edit.onclick=editName;heading.replaceChildren(edit);}
+        edit.textContent='本机 · '+name;
+        edit.setAttribute('aria-label','本机 · '+name+'，编辑名称');
+      }else heading.textContent=(device.id===selfId?'本机 · ':'')+name;
       card.querySelector('p').textContent=[device.platform,device.model&&device.model!==name?device.model:''].filter(Boolean).join(' · ');
       card.setAttribute('aria-label',name+' 输出设置');
       card.querySelector('summary').textContent=device.enabled===false?'输出设置 · 未参与播放':'输出设置';

@@ -14,7 +14,7 @@ std::string mobileRoom(const std::string&);
 namespace {
 constexpr int blockFrames=192000, slots=8;
 struct Block {int key;std::vector<int16_t> pcm;};
-struct Clock {int generation;bool playing;double start,duration,gain,intercept;};
+struct Clock {int generation;bool playing;double start,duration,gain,intercept;int trimFrames;};
 double ms(clockid_t id){timespec t{};clock_gettime(id,&t);return t.tv_sec*1000.+t.tv_nsec/1e6;}
 struct Output {
     OH_AudioRenderer* renderer=nullptr;
@@ -53,7 +53,7 @@ struct Output {
         if(rc!=AUDIOSTREAM_SUCCESS||!renderer)return false;
         if(OH_AudioRenderer_Start(renderer)!=AUDIOSTREAM_SUCCESS){close();return false;}return true;
     }
-    void sync(bool play,double start,double duration,double gain){
+    void sync(bool play,double start,double duration,double gain,int trimMs){
         double now=ms(CLOCK_BOOTTIME);
         if(now-lastCheck>(std::isfinite(intercept)?700:120)){
             int64_t frame=0,stamp=0;
@@ -66,7 +66,7 @@ struct Output {
             }
             OH_AudioRenderer_GetUnderflowCount(renderer,&underflows);lastCheck=now;
         }
-        std::atomic_store(&clock,std::make_shared<Clock>(Clock{generation,play,start,duration,gain,intercept}));
+        std::atomic_store(&clock,std::make_shared<Clock>(Clock{generation,play,start,duration,gain,intercept,trimMs*48}));
     }
     void render(int16_t* dst,int frames){
         auto c=std::atomic_load(&clock);auto now=ms(CLOCK_BOOTTIME);
@@ -80,12 +80,13 @@ struct Output {
         bool missing=false;int key=-1;std::shared_ptr<Block> block;
         for(int i=0;i<frames;i++,cursor+=speed){
             auto out=dst+i*2;
-            if(cursor<0||cursor>=c->duration*48000){out[0]=out[1]=0;continue;}
-            int64_t frame=int64_t(cursor);int index=int(frame/blockFrames);
+            const double sample=cursor-c->trimFrames;
+            if(sample<0||sample>=c->duration*48000){out[0]=out[1]=0;continue;}
+            int64_t frame=int64_t(sample);int index=int(frame/blockFrames);
             if(index!=key){key=index;block=std::atomic_load(&blocks[key%slots]);}
             auto p=size_t(frame%blockFrames)*2;
             if(!block||block->key!=key||p+1>=block->pcm.size()){out[0]=out[1]=0;missing=true;continue;}
-            const auto& s=block->pcm;auto next=p+3<s.size()?p+2:p;double frac=cursor-frame;
+            const auto& s=block->pcm;auto next=p+3<s.size()?p+2:p;double frac=sample-frame;
             for(int j=0;j<2;j++)out[j]=int16_t((s[p+j]+(s[next+j]-s[p+j])*frac)*c->gain);
             heard=true;
         }
@@ -110,10 +111,11 @@ napi_value put(napi_env env,napi_callback_info info){
     }return none(env);
 }
 napi_value sync(napi_env env,napi_callback_info info){
-    size_t n=4;napi_value a[4],v;bool play=false;double start=0,duration=0,gain=0;
+    size_t n=5;napi_value a[5],v;int32_t trimMs=0;bool play=false;double start=0,duration=0,gain=0;
     napi_get_cb_info(env,info,&n,a,nullptr,nullptr);napi_get_value_bool(env,a[0],&play);
     napi_get_value_double(env,a[1],&start);napi_get_value_double(env,a[2],&duration);napi_get_value_double(env,a[3],&gain);
-    const bool ok=output.open();if(ok)output.sync(play,start,duration,std::clamp(gain,0.,1.));
+    if(n==5)napi_get_value_int32(env,a[4],&trimMs);
+    const bool ok=output.open();if(ok)output.sync(play,start,duration,std::clamp(gain,0.,1.),std::clamp(trimMs,-1000,1000));
     napi_create_int32(env,ok?int(output.underflows):-1,&v);return v;
 }
 napi_value gaps(napi_env env,napi_callback_info){napi_value v;napi_create_int32(env,output.gaps,&v);return v;}

@@ -16,11 +16,15 @@ import org.json.*;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.util.LinkedHashMap;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.Map;
 
 final class ReceiverScreen implements RoomReceiver.Listener {
     private static final String ORIGIN = "https://lume.invalid/";
     private final java.util.concurrent.ExecutorService detailReads=java.util.concurrent.Executors.newSingleThreadExecutor();
+    private final java.util.concurrent.ExecutorService roomCoverReads=java.util.concurrent.Executors.newFixedThreadPool(2);
     private final java.util.concurrent.ExecutorService hostWork=java.util.concurrent.Executors.newSingleThreadExecutor();
     private final Map<String,LibraryPlayer.Song> detailSongs=new java.util.HashMap<>();
     private String listThumbnail(LibraryPlayer.Song song,int maxSide) {
@@ -48,6 +52,11 @@ final class ReceiverScreen implements RoomReceiver.Listener {
     }
     private void readDetail(JSONObject request){
         int token=request.optInt("token"),length=request.optInt("length");
+        if("roomCover".equals(request.optString("kind"))){
+            Runnable read=room.catalogCover(request.optString("id"),request.optString("revision"),request.optString("visible"),data->
+                app.runOnUiThread(()->{if(!closed)view.evaluateJavascript("window.lumeReadResult("+token+","+JSONObject.quote(data)+")",null);}));
+            roomCoverReads.execute(read);return;
+        }
         long offset=request.optLong("offset",-1);
         LibraryPlayer.Song song=detailSongs.get(request.optString("id"));
         String kind=request.optString("kind");
@@ -67,6 +76,51 @@ final class ReceiverScreen implements RoomReceiver.Listener {
         });
     }
     static final int STYLE_FILE_REQUEST = 84;
+    static final int TRANSFER_FILE_REQUEST = 85;
+    private int pickToken;
+    private android.net.Uri selectedTransfer;
+    private String selectedName="", selectionId="";
+    private void personalReply(int token,JSONObject result){
+        if(!closed)view.evaluateJavascript("window.lumePersonalReply("+token+","+result+")",null);
+    }
+    void pickedTransfer(int code,android.content.Intent result){
+        JSONObject response=new JSONObject();
+        try{
+            android.net.Uri uri=result==null?null:result.getData();
+            if(code==Activity.RESULT_OK&&uri!=null){
+                String name=null;
+                try(android.database.Cursor c=app.getContentResolver().query(uri,new String[]{android.provider.OpenableColumns.DISPLAY_NAME},null,null,null)){
+                    if(c!=null&&c.moveToFirst())name=c.getString(0);
+                }
+                if(name==null)name=uri.getLastPathSegment();
+                selectedTransfer=uri;selectedName=name;selectionId=java.util.UUID.randomUUID().toString();
+                response.put("name",name).put("selection",selectionId);
+            }
+        }catch(Exception e){try{response.put("error","无法读取所选文件");}catch(JSONException ignored){}}
+        personalReply(pickToken,response);
+    }
+    private void offerDocument(int token,android.net.Uri uri,String name,String title,String peer){
+        new Thread(()->{
+            JSONObject reply=new JSONObject();java.io.File temp=null;
+            try(android.os.ParcelFileDescriptor fd=app.getContentResolver().openFileDescriptor(uri,"r")){
+                if(fd==null)throw new java.io.IOException("歌曲无法读取");
+                String path="/proc/self/fd/"+fd.getFd();
+                try{android.system.Os.lseek(fd.getFileDescriptor(),0,android.system.OsConstants.SEEK_CUR);}
+                catch(android.system.ErrnoException notSeekable){
+                    temp=java.io.File.createTempFile("lume-transfer-",".part",app.getCacheDir());
+                    try(java.io.InputStream in=new android.os.ParcelFileDescriptor.AutoCloseInputStream(android.os.ParcelFileDescriptor.dup(fd.getFileDescriptor()));java.io.OutputStream out=new java.io.FileOutputStream(temp)){
+                        byte[] block=new byte[256*1024];int n;long bytes=0;
+                        while((n=in.read(block))!=-1){bytes+=n;if(bytes>500L*1024*1024)throw new java.io.IOException("歌曲超过单首上限 500 MiB");out.write(block,0,n);}
+                    }
+                    path=temp.getPath();
+                }
+                String ext=name.substring(name.lastIndexOf('.')+1).toLowerCase(java.util.Locale.ROOT);
+                reply=MobileHost.call(new JSONObject().put("type","personal").put("op","offer").put("peer",peer).put("path",path).put("ext",ext).put("title",title));
+            }catch(Exception e){try{reply.put("error",e.getMessage()==null?"歌曲无法读取":e.getMessage());}catch(JSONException ignored){}}
+            finally{if(temp!=null)temp.delete();}
+            final JSONObject value=reply;app.runOnUiThread(()->personalReply(token,value));
+        },"lume-send-document").start();
+    }
     private ValueCallback<android.net.Uri[]> styleFiles;
     void pickedStyleFiles(int result, android.content.Intent data) {
         if (styleFiles == null) return;
@@ -86,6 +140,7 @@ final class ReceiverScreen implements RoomReceiver.Listener {
     private final MobileHost host;
     private final SharedPreferences prefs;
     final LibraryPlayer local;
+    private final PlaybackEngine playback;
     private SongActions songActions;
     void songActivityResult(int request,int result,android.content.Intent data){if(songActions!=null)songActions.activityResult(request,result,data);}
     private RoomReceiver room;
@@ -94,6 +149,14 @@ final class ReceiverScreen implements RoomReceiver.Listener {
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final Map<String,String> hosts = new LinkedHashMap<>();
     private boolean ready, closed, canBack;
+    boolean widgetPlayerPending;
+    void widgetPlayerRequest(boolean requested){
+        widgetPlayerPending=requested;
+        if(!requested){view.setVisibility(View.VISIBLE);return;}
+        if(!ready){view.setVisibility(View.INVISIBLE);return;}
+        widgetPlayerPending=false;
+        view.evaluateJavascript("window.lumeOpenWidgetPlayer()",ignored->{if(!closed)view.setVisibility(View.VISIBLE);});
+    }
     private int safeTop, safeLeft, safeRight, safeBottom;
     private int scan, catalogRevision=-1;
     private Discovery.Session discovery;
@@ -111,9 +174,9 @@ final class ReceiverScreen implements RoomReceiver.Listener {
     private String hostError="";
     private String pendingHostSong="";
     private void checkNearby() throws JSONException {
-        boolean available = !closed && !joining && !creating && snapshot == null && !host.active;
-        if (available) {
-            JSONObject invite=host.call(new JSONObject().put("type","nearby").put("platform","Android").put("model",MobileHost.MODEL));
+        if (!closed) {
+            String availability=host.active?"hosting":creating||joining?"connecting":snapshot!=null?"joined":"available";
+            JSONObject invite=host.call(new JSONObject().put("type","nearby").put("platform","Android").put("model",MobileHost.MODEL).put("availability",availability));
             listening=true;
             if(invite.has("url")) view.evaluateJavascript("window.lumeInvite("+invite+")",null);
         } else if(listening){
@@ -130,14 +193,15 @@ final class ReceiverScreen implements RoomReceiver.Listener {
 
     ReceiverScreen(Activity app) {
         this.app = app;
-        host = new MobileHost(app);
+        playback = PlaybackEngine.get(app);
+        host = playback.host;
         prefs = app.getSharedPreferences("appearance", 0);
         saved = prefs.getString("host", "");
-        local = new LibraryPlayer(app, this::localChanged);
+        local = playback.local;
         frame = new FrameLayout(app);
         view = new WebView(app);
         frame.addView(view);
-        int base = Color.rgb(16, 18, 30);
+        int base = app.getColor(R.color.launch_surface);
         frame.setBackgroundColor(base);
         view.setBackgroundColor(base);
         // The page paints behind both bars; content receives their safe insets.
@@ -197,12 +261,16 @@ final class ReceiverScreen implements RoomReceiver.Listener {
         view.addJavascriptInterface(new Bridge(), "LumeNative");
     }
 
-    void start(RoomReceiver room) {
-        this.room = room;
-        localChanged();
+    void start() {
+        room = playback.room;
+        playback.screen = this;
+        catalog = playback.catalog;
+        snapshot = playback.snapshot;
+        theme = snapshot == null ? null : snapshot.optJSONObject("skin");
         app.setContentView(frame);
         frame.requestApplyInsets();
         view.loadUrl(ORIGIN + "player/index.html");
+        localChanged();
         search();
         handler.post(tick);
     }
@@ -214,7 +282,7 @@ final class ReceiverScreen implements RoomReceiver.Listener {
         stopSearch();
         try {checkNearby();} catch(JSONException ignored){}
         handler.removeCallbacksAndMessages(null);
-        detailReads.shutdownNow();hostWork.shutdownNow();local.close(); room.disconnect(); host.stop();
+        detailReads.shutdownNow();roomCoverReads.shutdownNow();hostWork.shutdownNow();playback.detach(this);
         view.removeJavascriptInterface("LumeNative"); view.destroy();
     }
 
@@ -347,6 +415,28 @@ final class ReceiverScreen implements RoomReceiver.Listener {
         });
     }
 
+    private boolean preparingInvite;
+    private void acceptInvite(JSONObject action)throws JSONException {
+        if(preparingInvite||creating||joining)return;
+        JSONObject offer=MobileHost.call(action.put("type","inviteFeedback").put("status","accept"));
+        if(!offer.has("url") || offer.optBoolean("switchHost")!=host.active){status="邀请已失效，请让房主重新邀请";publish();return;}
+        if(!host.active){handle(offer.put("type","join"));return;}
+        final int generation=scan;
+        preparingInvite=true;
+        hostWork.execute(()->{
+            RoomReceiver.PreparedInvite prepared=null;
+            try{prepared=RoomReceiver.prepareInvite(offer);}catch(Exception ignored){}
+            final RoomReceiver.PreparedInvite readyInvite=prepared;
+            app.runOnUiThread(()->{
+                preparingInvite=false;
+                if(closed||!host.active||generation!=scan)return;
+                if(readyInvite==null){status="未能连接受邀空间，已保留当前空间";publish();return;}
+                room.disconnect();host.stop();reset("");stopSearch();joining=true;
+                saved=offer.optString("url");prefs.edit().putString("host",saved).apply();
+                room.connect(saved,"","","",readyInvite);publish();
+            });
+        });
+    }
     private void handle(JSONObject action) throws JSONException {
         String type = action.optString("type"), id = action.optString("id");
         boolean joined = snapshot != null;
@@ -373,8 +463,14 @@ final class ReceiverScreen implements RoomReceiver.Listener {
                 if(current!=level)manager.setStreamVolume(stream,level,android.media.AudioManager.FLAG_SHOW_UI);
                 return;
             }
-            case "trackDetails": if(host.active)MobileHost.call(action); return;
-            case "ready": playerSession(false, false); ready = true; previous = new JSONObject(); publishInsets(); frame.requestApplyInsets(); publish(); return;
+            case "personal": personal(action);return;
+            case "catalogThumbnail": case "trackDetails": if(host.active)MobileHost.call(action); return;
+            case "favoriteSet": playback.setFavorite(action.optString("key"),action.optBoolean("enabled"));return;
+            case "ready":
+                playback.importFavorites(action.optJSONArray("favoriteKeys"));playerSession(false, false);
+                ready=true;sendFavorites();previous=new JSONObject();publishInsets();frame.requestApplyInsets();publish();
+                if(widgetPlayerPending)widgetPlayerRequest(true);
+                return;
             case "playerSession": playerSession(action.optBoolean("enabled"), action.optBoolean("lyrics")); return;
             case "landscapeAwake": prefs.edit().putBoolean("landscapeAwake",action.optBoolean("enabled")).apply();syncKeepAwake();publish();return;
             case "systemBarAppearance": navigationAppearance(action.optBoolean("dark")); return;
@@ -395,6 +491,8 @@ final class ReceiverScreen implements RoomReceiver.Listener {
                 if(joined)room.action(action);
                 return;
             case "search": search(); return;
+            case "inviteFeedback":MobileHost.call(action);return;
+            case "acceptRoomInvite":acceptInvite(action);return;
             case "searchPhones":
                 if(host.active){host.searchPhones();publish();}return;
             case "invitePhone":
@@ -408,7 +506,7 @@ final class ReceiverScreen implements RoomReceiver.Listener {
                 status = !inviteToken.isEmpty()?"正在接受邀请":pin.isEmpty() ? "等待主机允许加入" : "正在配对"; publish();
                 room.connect(saved, pin,inviteToken,action.optString("deviceId")); return;
             case "leave": hostError="";pendingHostSong="";room.disconnect(); if(host.active)host.stop(); reset("已离开空间"); return;
-            case "pauseImport":local.pauseImport(action.optBoolean("enabled"));return;
+            case "pauseImport":case "stopScan":local.stopScan();return;
             case "songNext":case "songShare":case "songHide":case "songDelete":case "songRestore":
                 int token=action.optInt("token");
                 if(songActions==null)songActions=new SongActions(app,local,(t,ok,message)->{
@@ -417,15 +515,11 @@ final class ReceiverScreen implements RoomReceiver.Listener {
                 if(joined){view.evaluateJavascript("window.lumeSongActionResult("+token+",false,'请先离开播放空间')",null);return;}
                 songActions.run(type,id,token);return;
             case "detailRead":readDetail(action);return;
-            case "pickScanBlock": if((!joined||host.active)&&!local.scanning)local.pickFolder(action,true);return;
-            case "scan": if ((!joined||host.active)&&!local.scanning)local.pickFolder(action,false);return;
-            case "rescan": if ((!joined||host.active)&&!local.scanning)local.rescan(action);return;
-            case "import": if ((!joined||host.active)&&!local.scanning) local.pick(); return;
-            case "toggle":
-                if (joined) type = snapshot.optBoolean("roomPlaying") ? "pause" : "play";
-                else { local.toggle(); return; } break;
-            case "next": case "previous":
-                if (!joined) { local.step(type.equals("next") ? 1 : -1); return; } break;
+            case "pickScanBlock": if((!joined||host.active)&&!local.scanning)local.pickFolder(app,action,true);return;
+            case "scan": if ((!joined||host.active)&&!local.scanning)local.pickFolder(app,action,false);return;
+            case "rescan": if ((!joined||host.active)&&!local.scanning)local.rescan(app,action);return;
+            case "import": if ((!joined||host.active)&&!local.scanning) local.pick(app); return;
+            case "toggle": case "next": case "previous": playback.command(type); return;
             case "seek":
                 double seconds = Math.max(0, action.optDouble("seconds", 0));
                 if (!joined) { local.seek(seconds); return; }
@@ -435,6 +529,7 @@ final class ReceiverScreen implements RoomReceiver.Listener {
                     Map<String,Integer> indexes=new LinkedHashMap<>();
                     for(int i=0;i<local.songs.size();i++)indexes.put(localId(i),i);
                     Integer selected=indexes.get(id);if(selected==null)return;
+                    playback.prepareService();
                     local.order.clear();local.playNext.clear();
                     JSONArray order=action.optJSONArray("order");
                     if(order!=null){
@@ -448,19 +543,54 @@ final class ReceiverScreen implements RoomReceiver.Listener {
                     local.play(selected);
                     return;
                 }
-                action.put("trackId", host.active?hostSongId(id):id); type = "play"; break;
+                playback.prepareService();action.put("trackId", host.active?hostSongId(id):id); type = "play"; break;
             default: return;
         }
         room.action(action.put("type", type));
     }
 
+    private void personal(JSONObject action)throws JSONException {
+        int token=action.optInt("token");
+        String op=action.optString("op");
+        JSONObject result=new JSONObject();
+        try{
+            if(op.equals("pickFile")){
+                pickToken=token;
+                android.content.Intent pick=new android.content.Intent(android.content.Intent.ACTION_OPEN_DOCUMENT);
+                pick.addCategory(android.content.Intent.CATEGORY_OPENABLE);pick.setType("*/*");
+                pick.putExtra(android.content.Intent.EXTRA_MIME_TYPES,new String[]{"audio/*","video/mp4","video/webm","application/ogg","application/octet-stream"});
+                app.startActivityForResult(pick,TRANSFER_FILE_REQUEST);return;
+            }else if(op.equals("offerFile")){
+                if(selectedTransfer==null||!selectionId.equals(action.optString("id")))throw new IllegalStateException("请重新选择歌曲");
+                int dot=selectedName.lastIndexOf('.');
+                offerDocument(token,selectedTransfer,selectedName,dot>0?selectedName.substring(0,dot):selectedName,action.getString("peer"));return;
+            }else if(op.equals("offer")){
+                LibraryPlayer.Song song=detailSongs.get(action.optString("id"));
+                if(song==null||song.hidden)throw new IllegalStateException("请选择本机歌曲");
+                String filename=song.facts.optString("fileName",song.title);
+                offerDocument(token,android.net.Uri.parse(song.uri),filename,song.title,action.getString("peer"));return;
+            }else if(java.util.Arrays.asList("status","rename","checkName","trust","approvePair","rejectPair","forget","accept","decline","find").contains(op)){
+                result=MobileHost.call(action);
+                if(op.equals("rename")&&!result.has("error")){MobileHost.MODEL=result.getString("name");publish();}
+            }
+            JSONArray files=result.optJSONArray("files");
+            if(files!=null&&!local.scanning)for(int i=0;i<files.length();i++){
+                JSONObject item=files.getJSONObject(i);
+                java.io.File file=new java.io.File(new java.io.File(app.getFilesDir(),"received"),item.getString("file"));
+                local.receivePersonal(file,item.getString("title"),item.getString("ext"));
+                MobileHost.call(new JSONObject().put("type","personal").put("op","imported").put("key",item.getString("key")));
+            }
+            if(op.equals("library"))result.put("songs",localCatalog);
+        }catch(Exception e){result.put("error",e.getMessage()==null?"设备操作失败":e.getMessage());}
+        view.evaluateJavascript("window.lumePersonalReply("+token+","+result+")",null);
+    }
     private String localId(int i) { return local.songs.get(i).uri; }
     private String hostSongId(String id) {
         for(LibraryPlayer.Song song:local.songs)if(song.uri.equals(id))
             return java.util.UUID.nameUUIDFromBytes(id.getBytes(java.nio.charset.StandardCharsets.UTF_8)).toString();
         return id;
     }
-    private void localChanged() {
+    void localChanged() {
         localOrder=new JSONArray();for(int index:local.order)if(index>=0&&index<local.songs.size()&&!local.songs.get(index).hidden)localOrder.put(localId(index));
         if (localCatalog.length() != local.songs.size()||catalogRevision!=local.revision) {
             catalogRevision=local.revision;
@@ -469,8 +599,9 @@ final class ReceiverScreen implements RoomReceiver.Listener {
             for (int i = 0; i < local.songs.size(); i++) try {
                 LibraryPlayer.Song song=local.songs.get(i);
                 detailSongs.put(localId(i),song);
-                detailSongs.put(java.util.UUID.nameUUIDFromBytes(song.uri.getBytes(java.nio.charset.StandardCharsets.UTF_8)).toString(),song);
-                localCatalog.put(song.metadata().put("id",localId(i)).put("thumbSource",song.uri+"|"+song.coverUri).put("hasSideLyrics",!song.lyricUri.isEmpty()).put("hasSideCover",!song.coverUri.isEmpty()));
+                String hostId=java.util.UUID.nameUUIDFromBytes(song.uri.getBytes(java.nio.charset.StandardCharsets.UTF_8)).toString();
+                detailSongs.put(hostId,song);
+                localCatalog.put(song.coverRecord().put("hostId",hostId).put("originalUri",song.uri));
             } catch (JSONException ignored) { }
         }
         publish();
@@ -486,9 +617,18 @@ final class ReceiverScreen implements RoomReceiver.Listener {
         final int run = ++scan;
         hosts.clear();spaces=new JSONArray();searching=true;
         final Map<String,String> found=new LinkedHashMap<>(); status = "正在搜索附近空间 · 30 秒后停止"; publish();
-        discovery=Discovery.search(saved, (name,url) -> app.runOnUiThread(() -> {
+        final Map<String,String> byRoom=new HashMap<>();final Set<String> liveIds=new HashSet<>();
+        discovery=Discovery.search(saved, (name,url,roomId,live) -> app.runOnUiThread(() -> {
             if (closed || run != scan) return;
-            found.put(url,name);if(hosts.containsKey(url))return;
+            if(!roomId.isEmpty()){
+                String old=byRoom.get(roomId);
+                if(old!=null&&!old.equals(url)){
+                    if(!live||liveIds.contains(roomId))return;
+                    hosts.remove(old);found.remove(old);
+                }
+                byRoom.put(roomId,url);if(live)liveIds.add(roomId);
+            }
+            found.put(url,name);if(name.equals(hosts.get(url)))return;
             hosts.put(url, name);
             spaces = new JSONArray();
             for (Map.Entry<String,String> h : hosts.entrySet()) try {
@@ -507,7 +647,7 @@ final class ReceiverScreen implements RoomReceiver.Listener {
     }
 
     private void reset(String message) {
-        local.reloadCounts();joining=false; snapshot = null; theme = null; catalog = new JSONArray(); status = message; channel = ""; publish();
+        playback.clearRoom();local.reloadCounts();joining=false; snapshot = null; theme = null; catalog = new JSONArray(); status = message; channel = ""; publish();
     }
     public void skin(JSONObject next) { if (!String.valueOf(next).equals(String.valueOf(theme))) theme = next; }
     public void show(String value,String title,String route) {
@@ -529,7 +669,13 @@ final class ReceiverScreen implements RoomReceiver.Listener {
             try{room.action(new JSONObject().put("type","play").put("trackId",selected));}catch(JSONException ignored){}
         }
     }
+    void sendFavorites(){
+        if(ready&&!closed)view.evaluateJavascript("window.lumeFavoriteState&&window.lumeFavoriteState("+playback.favoriteKeys()+")",null);
+    }
+    boolean switchingPlayback() { return joining || creating; }
     private void publish() {
+        if(closed)return;
+        playback.sync();
         local.samplePlayback();
         syncKeepAwake();
         if (!ready || closed) return;
@@ -540,14 +686,14 @@ final class ReceiverScreen implements RoomReceiver.Listener {
                 .put("searching",searching)
                 .put("landscapeAwake",prefs.getBoolean("landscapeAwake",false))
                 .put("creating",creating).put("hostError",hostError)
-                .put("hosting",host.active).put("joined", joined).put("host", host.active?"本机空间":saved).put("savedHost", saved).put("hosts", spaces)
+                .put("hosting",host.active).put("joined", joined).put("host", host.active?"本机空间":saved).put("hostAddress",joined?snapshot.optString("hostAddress"):"").put("savedHost", saved).put("hosts", spaces)
                 .put("status", status).put("channel", channel).put("skin", theme == null ? JSONObject.NULL : theme)
                 .put("completion",joined?snapshot.optJSONObject("completion"):MobileHost.call(new JSONObject().put("type","historyEvent")))
-                .put("playRecords",joined?snapshot.optJSONArray("playRecords"):MobileHost.call(new JSONObject().put("type","historyRecords")).optJSONArray("records"))
+                .put("playRecords",MobileHost.call(new JSONObject().put("type","historyRecords").put("current",joined?snapshot.optString("currentSession"):"").put("playing",joined&&snapshot.optBoolean("roomPlaying")).put("rows",joined?snapshot.optJSONArray("playRecords"):null)).optJSONArray("records"))
                 .put("roomDetails",joined?snapshot.optJSONObject("roomDetails"):JSONObject.NULL)
                 .put("localSong",joined?snapshot.optJSONObject("localSong"):JSONObject.NULL).put("localTrackId",joined?snapshot.optString("localTrackId"):"")
-                .put("counts",local.counts).put("scanTotal",local.scanTotal).put("scanFound",local.scanFound).put("scanDone",local.scanDone)
-                .put("scanHistory",local.scanHistory).put("scanStatus",local.scanStatus).put("scanning",local.scanning).put("scanPaused",local.paused)
+                .put("counts",local.counts).put("scanTotalKnown",local.scan.scanTotalKnown).put("scanTotal",local.scan.scanTotal).put("scanFound",local.scan.scanFound).put("scanDone",local.scan.scanDone)
+                .put("scanHistory",local.scanHistory).put("scanStatus",local.scanStatus).put("scanning",local.scanning).put("scanPaused",false)
                 .put("order",joined?JSONObject.NULL:localOrder).put("songs", joined ? catalog : localCatalog)
                 .put("id", joined ? snapshot.optString("trackId") : local.songs.isEmpty() || local.songs.get(local.index).hidden ? "" : localId(local.index))
                 .put("title", joined ? snapshot.optString("roomTrack") : local.songs.isEmpty() || local.songs.get(local.index).hidden ? "" : local.songs.get(local.index).title)
@@ -563,6 +709,7 @@ final class ReceiverScreen implements RoomReceiver.Listener {
                 .put("pending",joined?snapshot.optJSONArray("pending"):new JSONArray());
             if(host.active){
                 JSONObject info=host.status();
+                data.put("coverLibrary",localCatalog).put("coverRequests",info.optJSONArray("coverRequests")).put("coverRevision",info.optString("coverRevision"));
                 data.put("hostPin",info.optString("pin")).put("address",info.optString("address"));
                 data.put("nearbyPhones",info.optJSONArray("nearbyPhones")).put("phoneSearching",info.optBoolean("phoneSearching")).put("inviteStatus",info.optString("inviteStatus"));
             }

@@ -30,11 +30,12 @@ Folia 的样式编辑器随附下列两首歌的歌词、译文和时间轴，�
 | 组件或素材 | 来源、用途与授权 |
 | --- | --- |
 | Lens 透镜设计系统 | DayDreamInAReverie，MIT。澄音通过 KONEWS/design-systems 的 `7a424c9` 引入 WebGL2 折射及弹性手势。[使用的分支](https://github.com/KONEWS/design-systems) · [许可证](src/appearance/lens/LICENSE) |
+| 局域网个人设备加密 | Monocypher 4.0.2，使用 X25519 与 XChaCha20-Poly1305，采用 CC0-1.0 许可。[源码及许可](mobile/native/vendor/monocypher.c) |
 | Lucide 图标 | Lucide Contributors，ISC。继承自 Feather 的部分由 Cole Bemis 创作，MIT。[Lucide](https://github.com/lucide-icons/lucide) · [随附声明](mobile/player-assets/player/vendor/lucide/LICENSE) |
 | 音频元数据与原生音频 | music-metadata 用于读取标签、歌词与封面，MIT。移动原生代码使用 David Reid 的 miniaudio 0.11.23，其头文件提供公有领域或 MIT-0 两种选项。[music-metadata](https://github.com/Borewit/music-metadata) · [miniaudio 源文件与许可](mobile/native/vendor/miniaudio.h) |
 | 原生 HTTP 与 JSON | cpp-httplib 来自 Yuji Hirose，JSON for Modern C++ 来自 Niels Lohmann 等贡献者，均为 MIT。[cpp-httplib 许可](mobile/native/vendor/LICENSE-httplib) · [JSON 许可](mobile/native/vendor/LICENSE-json) |
 | 节拍、音轨分析模型 | Beat This! 来自 CPJKU，HTDemucs 来自 Meta Research。Folia 提供转换后的权重和 SHA-256，清单列出两个模型各自的来源及 MIT 许可。首次构建按清单下载。[Beat This!](https://github.com/CPJKU/beat_this) · [Demucs](https://github.com/facebookresearch/demucs) · [模型、转换及镜像清单](pc-lyrics/shared/modelManifest.json) |
 | FFmpeg 构建资料 | Folia 桌面工程随附 FFmpeg 8.1.2 的构建参数、源码地址、校验值及 LGPL 许可。[构建记录和许可](pc-lyrics/build/ffmpeg/win-x64/share/folia-ffmpeg/) |
-| 试听音乐 | 《潮汐之间》《月色落在水面》《林间的呼吸》署名 LUME Studio，由仓库内的振荡器合成脚本生成。校准音随试听资源提供。[生成脚本](scripts/generate-demo.mjs) · [曲目清单](resources/demo/manifest.json) |
+| 校准音 | 随应用提供的设备同步校准节拍。 |
 
 桌面外壳使用 Electron，网页界面使用 React、Vite，局域网服务使用 Express 和 ws。仓库的三份 npm 锁定清单记录直接及间接依赖和相应版本。[主工程依赖](package-lock.json) · [共用歌词依赖](folia/package-lock.json) · [桌面歌词依赖](pc-lyrics/package-lock.json)

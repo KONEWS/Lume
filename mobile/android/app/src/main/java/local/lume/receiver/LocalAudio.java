@@ -37,8 +37,7 @@ final class LocalAudio {
                     JSONObject info=new JSONObject(new String(block(path,"stereo",-1),StandardCharsets.UTF_8));
                     if(!identity.equals(info.optString("audioIdentity"))||info.optLong("audioBytes")!=bytes)continue;
                     if(block(path,"stereo",0,identity).length==0)continue;
-                    JSONObject metadata=song.metadata().put("id",UUID.nameUUIDFromBytes(song.uri.getBytes(StandardCharsets.UTF_8)).toString())
-                        .put("hasSideLyrics",!song.lyricUri.isEmpty()).put("hasSideCover",!song.coverUri.isEmpty());
+                    JSONObject metadata=song.coverRecord().put("hostId",UUID.nameUUIDFromBytes(song.uri.getBytes(StandardCharsets.UTF_8)).toString());
                     synchronized(this){if(gen!=generation)return;match=new Match(fd,metadata,identity);fd=null;}return;
                 }catch(Exception ignored){}finally{if(fd!=null)try{fd.close();}catch(Exception ignored){}}
             }

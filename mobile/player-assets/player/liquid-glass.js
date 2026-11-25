@@ -1498,6 +1498,7 @@ void main(){
   function start() {
     const stage = document.body;
     const root = document.documentElement;
+    const phone = Boolean(document.getElementById("library-frame"));
     const acrylic = window.lumeDesktop?.platform === "Windows" || stage.querySelector("#root") && /Windows/i.test(navigator.userAgent);
     stage.classList.toggle("acrylic", Boolean(acrylic));
     let canvas;
@@ -1506,6 +1507,7 @@ void main(){
     let renderer, jelly, sceneKey = "";
     function sync() {
       const reduced = root.dataset.glass === "reduced" || reducedTransparency.matches;
+      stage.classList.toggle("phone-material", phone && !reduced);
       if (reduced) {
         jelly?.destroy();
         renderer?.destroy();
@@ -1516,7 +1518,7 @@ void main(){
         return;
       }
       stage.classList.add("liquid-stage");
-      if (!acrylic && !renderer) {
+      if (!phone && !acrylic && !renderer) {
         canvas = document.createElement("canvas");
         canvas.className = "lume-optics";
         canvas.setAttribute("aria-hidden", "true");
@@ -1538,6 +1540,7 @@ void main(){
         renderer?.setMotionSource(jelly);
       }
       jelly.reduced = reducedMotion.matches;
+      if (phone) return;
       if (renderer) renderer.reducedMotion = reducedMotion.matches;
       const palette = [root.dataset.phoneTheme, root.dataset.customSkin, ...["background", "surface", "accent"].map((k) => root.style.getPropertyValue("--skin-" + k))].join("|");
       if (sceneKey !== palette) {

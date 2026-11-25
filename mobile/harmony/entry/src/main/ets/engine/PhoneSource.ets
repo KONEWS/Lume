@@ -16,13 +16,15 @@ export class PhoneSource {
     this.lastToken=task.token;
     const url=host+'/api/source-data/'+task.token;
     let file:fs.File|undefined=undefined;
+    let tooLarge=false;
     try{
       const song=this.library.songs.find(s=>s.id===task.songId);
       if(!song||song.hidden)throw new Error('未共享的歌曲');
-      if(!/^[a-fA-F0-9-]{36}$/.test(song.id))throw new Error('无效文件');
+      if(!/^([a-fA-F0-9-]{36}|received-[a-f0-9]{96})$/.test(song.id))throw new Error('无效文件');
       file=fs.openSync(this.context.filesDir+'/'+song.id,fs.OpenMode.READ_ONLY);
       const size=fs.statSync(file.fd).size;
-      if(size<=0 || size>200*1024*1024)throw new Error('文件大小不支持');
+      tooLarge=size>500*1024*1024;
+      if(size<=0 || tooLarge)throw new Error('文件大小不支持');
       for(let offset=0;offset<size;){
         const len=Math.min(blockSize,size-offset);
         let buf=new ArrayBuffer(len);
@@ -43,7 +45,7 @@ export class PhoneSource {
     }catch(e){
       const client=http.createHttp();
       try{const headers:Record<string,string>={'Cookie':cookie};
-        await client.request(url+'/fail',{method:http.RequestMethod.POST,header:headers,connectTimeout:2000,readTimeout:2500});
+        await client.request(url+'/fail'+(tooLarge?'?reason=size':''),{method:http.RequestMethod.POST,header:headers,connectTimeout:2000,readTimeout:2500});
       }catch(ignored){}finally{client.destroy();}
     }finally{if(file)fs.closeSync(file);}
   }

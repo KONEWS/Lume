@@ -8,6 +8,7 @@ harness=r'''
 #include <cstdio>
 #include <ctime>
 #include <fstream>
+#include <functional>
 #include <map>
 #include <mutex>
 #include <string>

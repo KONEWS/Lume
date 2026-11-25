@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { Device, GuestRoom } from './types';
 
-interface Phone { id:string; name:string; platform:string; address:string; roomPort?:number }
+interface Phone { id:string; name:string; platform:string; address:string; roomPort?:number; availability?:string;hostInvitable?:boolean;inviteStatus?:string }
 
 export function NearbyPhones({connected,refreshKey=0,onJoined,guestRoom}:{connected:Device[];refreshKey?:number;onJoined?:()=>void;guestRoom?:GuestRoom|null}) {
   const [phones, setPhones] = useState<Phone[]>([]);
@@ -56,12 +56,13 @@ export function NearbyPhones({connected,refreshKey=0,onJoined,guestRoom}:{connec
     <p role="status">{message || '邀请手机加入，或选择其他设备创建的空间。'}</p>
     {phones.map(phone=>{
       const waiting=sent?.id===phone.id && sent.until>Date.now();
+      const busy=phone.availability==='hosting'?'正在主持空间':phone.availability==='joined'?'已加入空间':phone.availability==='connecting'?'正在连接':'';
       return <div className="nearby-row" key={phone.id}>
-        <div><strong>{phone.name}</strong><small>{phone.platform} · {phone.address}</small></div>
+        <div><strong>{phone.name}</strong><small>{[phone.platform,phone.address,busy].filter(Boolean).join(' · ')}</small>{phone.inviteStatus&&<small role="status">{phone.inviteStatus}</small>}</div>
         {phone.roomPort ? (window.lumeDesktop
           ? <button className="button button-secondary" disabled={!!joining||guestRoom?.url==='http://'+phone.address+':'+phone.roomPort&&guestRoom.status==='joined'} onClick={()=>void join(phone)}>{joining===phone.id?'等待手机确认…':guestRoom?.url==='http://'+phone.address+':'+phone.roomPort&&guestRoom.status==='joined'?'已加入':'加入空间'}</button>
           : <a href={'http://'+phone.address+':'+phone.roomPort} target="_blank" rel="noreferrer">加入空间</a>)
-          : <button className="button button-secondary" disabled={waiting||guestRoom?.status==='joined'} onClick={()=>void invite(phone)}>{guestRoom?.status==='joined'?'由手机房主邀请':waiting?'已邀请':'邀请加入'}</button>}
+          : <button className="button button-secondary" disabled={waiting||guestRoom?.status==='joined'||!!busy&&!(phone.availability==='hosting'&&phone.hostInvitable)} onClick={()=>void invite(phone)}>{guestRoom?.status==='joined'?'由房主邀请':waiting?'已发出':'邀请加入'}</button>}
       </div>;
     })}
     {inviteError && <p role="alert">{inviteError}</p>}

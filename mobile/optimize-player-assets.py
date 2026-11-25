@@ -20,6 +20,27 @@ def sha(data):
     return hashlib.sha256(data).hexdigest()
 
 
+def bundle_home_styles(player):
+    # Combine the top-level player styles in their HTML cascade order. The
+    # bundle stays in the same directory, so relative URLs keep their bases.
+    index = player / 'index.html'
+    html = index.read_text(encoding='utf8')
+    link = re.compile(r'<link rel="stylesheet" href="([\w-]+\.css)">')
+    names = link.findall(html)
+    if len(names) < 2:
+        return
+    sheets = [(player / name).read_bytes() for name in names]
+    if any(re.search(rb'^\s*@(import|charset|namespace)\b', sheet, re.M | re.I) for sheet in sheets):
+        return
+    bundle = 'home-bundle.css'
+    (player / bundle).write_bytes(b'\n'.join(sheets))
+    first = link.search(html)
+    index.write_text(html[:first.start()] + f'<link rel="stylesheet" href="{bundle}">' +
+                     link.sub('', html[first.end():]), encoding='utf8')
+    for name in set(names):
+        (player / name).unlink()
+
+
 def optimize(player, report_path=None):
     stage = player / 'folia/stage.js'
     source = player / 'folia/source.zip'
@@ -106,3 +127,4 @@ if __name__ == '__main__':
     parser.add_argument('--report', type=Path)
     args = parser.parse_args()
     optimize(args.player.resolve(), args.report)
+    bundle_home_styles(args.player.resolve())

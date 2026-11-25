@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.18)
-project(lume_room LANGUAGES CXX)
-add_library(lume SHARED room.cpp decoder.cpp local_media.cpp)
+project(lume_room LANGUAGES C CXX)
+add_library(lume SHARED room.cpp peer_exchange.cpp vendor/monocypher.c vendor/utf8proc/utf8proc.c decoder.cpp local_media.cpp)
 set(player_assets "${CMAKE_CURRENT_SOURCE_DIR}/../player-assets/player")
 set(guest_files "${CMAKE_CURRENT_SOURCE_DIR}/guest.html" "${CMAKE_CURRENT_SOURCE_DIR}/guest.js" "${player_assets}/outputs.js" "${player_assets}/studio-theme.css")
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${guest_files})

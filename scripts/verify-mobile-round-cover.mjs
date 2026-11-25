@@ -96,9 +96,10 @@ try{
     await evaluate('lumeUpdate({playing:true})');await pause(180);assert.notEqual(await turn(),paused);
     await evaluate('lumeUpdate({playing:false})');await pause(40);
     const stopped=await turn();await pause(180);assert.equal(await turn(),stopped,'pause holds the angle');
-    const stoppedTime=await evaluate(`$('album').getAnimations({subtree:true})[0].currentTime`);
+    const phase=()=>evaluate(`parseFloat($('album').style.getPropertyValue('--cover-angle'))`);
+    const stoppedTime=await phase();
     await evaluate('lumeUpdate({playing:true})');await pause(130);assert.notEqual(await turn(),stopped,'resume advances from paused angle');
-    assert((await evaluate(`$('album').getAnimations({subtree:true})[0].currentTime`))>stoppedTime,'resume does not restart rotation');
+    assert((await phase())>stoppedTime,'resume does not restart rotation');
     await evaluate(`paintDetails($('album'),{cover:'data:image/svg+xml,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80"><rect width="80" height="80" fill="teal"/></svg>'),lyrics:''})`);
     assert.equal(await evaluate(`getComputedStyle($('album'),'::before').backgroundImage===getComputedStyle($('album')).backgroundImage`),true,'late loaded artwork updates without replacing the rotor');
     await evaluate(`bindArt($('album'),state.songs[0])`);
@@ -107,7 +108,7 @@ try{
       await close();await setting(round);
       for(const [width,height] of [[390,844],[844,390],[320,568],[740,360]]){
         await send('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:true});await pause(100);
-        await evaluate('navigate("home");preparePlayerMotion()');
+        await evaluate('navigate("home");preparePlayerMotion(createPlayerMotion)');
         const frames=await evaluate(`(() => {
           const rows=[];
           for(const p of [0,.2,.5,.8,1]){

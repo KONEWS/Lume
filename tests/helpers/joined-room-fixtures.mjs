@@ -22,7 +22,7 @@ async function phoneFixture(platform='HarmonyOS') {
       if(phone.offline){json({error:'phone disconnected'},503);return;}
       if(req.url==='/api/info'){json({service:'lume-room/1',roomName:platform+' 手机空间'});return;}
       if(req.url==='/api/join/request'){
-        assert.equal(body.platform,'Windows');assert.equal(body.model,'澄音 Windows');
+        assert.equal(body.platform,'Windows');assert.equal(typeof body.model,'string');assert(body.model.trim());phone.submittedName=body.model;
         const id='ticket-'+(tickets.size+1),secret='secret-'+requests.length;tickets.set(id,secret);json({id,secret});return;
       }
       if(req.url==='/api/join/status'){
@@ -39,7 +39,7 @@ async function phoneFixture(platform='HarmonyOS') {
         if(body.leave){phone.leaves++;sessions.delete(req.headers.cookie);json({});return;}
         if(phone.stallReceiver){res.writeHead(200,{'Content-Type':'application/json'});res.write('{');return;}
         assert.equal(body.savedChannel,'stereo');phone.receivers++;
-        const output={id:'windows-output',platform:'Windows',name:'澄音 Windows',channel:phone.channel,delayMs:phone.delayMs,volume:phone.volume,muted:phone.muted,enabled:phone.enabled};
+        const output={id:'windows-output',platform:'Windows',name:body.model,channel:phone.channel,delayMs:phone.delayMs,volume:phone.volume,muted:phone.muted,enabled:phone.enabled};
         json({...phone.identity,...(phone.details?{detailToken:'a'.repeat(32)}:{}),serverTime:Date.now(),position:phone.position,duration:catalog.find(track=>track.id===phone.trackId).duration,
           roomPlaying:phone.playing,playing:phone.playing&&phone.enabled,shuffle:phone.shuffle,volume:phone.muted?0:phone.volume,enabled:phone.enabled,channel:phone.channel,delayMs:phone.delayMs,
           selfId:output.id,outputs:[output],pending:[],trackId:phone.trackId,roomTrack:catalog.find(track=>track.id===phone.trackId).title,
@@ -78,11 +78,11 @@ async function phoneFixture(platform='HarmonyOS') {
 
 async function playerFixture() {
   const directory=await fs.mkdtemp(path.join(os.tmpdir(),'lume-joined-room-'));
-  const resourcesDir=path.join(directory,'resources'),demoDir=path.join(resourcesDir,'demo'),staticDir=path.join(directory,'dist');
-  await fs.mkdir(demoDir,{recursive:true});await fs.mkdir(staticDir,{recursive:true});
+  const resourcesDir=path.join(directory,'resources'),mediaDir=path.join(directory,'data','media'),staticDir=path.join(directory,'dist');
+  await fs.mkdir(mediaDir,{recursive:true});await fs.mkdir(staticDir,{recursive:true});
   await fs.writeFile(path.join(staticDir,'index.html'),'<html>Local player</html>');
-  await fs.writeFile(path.join(demoDir,'local.wav'),Buffer.alloc(44));
-  await fs.writeFile(path.join(demoDir,'manifest.json'),JSON.stringify([{id:'local-song',title:'本机歌曲',file:'local.wav',duration:60}]));
+  await fs.writeFile(path.join(mediaDir,'local.wav'),Buffer.alloc(44));
+  await fs.writeFile(path.join(directory,'data','library.json'),JSON.stringify({tracks:[{source:'import',id:'local-song',title:'本机歌曲',file:'local.wav',duration:60}]}));
   const service=await startServer({port:0,host:'127.0.0.1',dataDir:path.join(directory,'data'),resourcesDir,staticDir});
   async function request(route,body){const response=await fetch(service.url+route,body===undefined?undefined:{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});return {status:response.status,data:await response.json()};}
   return {service,request,directory,staticDir,state:async()=>(await request('/api/state')).data,

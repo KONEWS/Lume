@@ -1,21 +1,21 @@
 /* Only the playback artwork changes shape; its measured box stays square. */
 :root[data-round-cover] body #album {
   position: relative; overflow: hidden; border-radius: 50%;
+  border: 0; box-shadow: none;
   /* Clip the entire composited stack, including the rotating texture and rim. */
   clip-path: circle(50% at 50% 50%); isolation: isolate;
   background-size: 0 0; background-repeat: no-repeat;
 }
-:root[data-round-cover] #album::before {
+#phone-dock #mini-art { position: relative; overflow: hidden; background-size: 0 0; background-repeat: no-repeat }
+#mini-art::before, :root[data-round-cover] #album::before {
   content: ''; position: absolute; inset: 0; border-radius: inherit;
   background-image: inherit; background-color: inherit;
   background-position: var(--round-cover-position, center);
   background-size: var(--round-cover-size, cover);
   background-repeat: no-repeat; pointer-events: none;
-  animation: playback-cover-turn 24s linear infinite paused;
+  transform: rotate(var(--cover-angle,0deg));
 }
-:root[data-round-cover] #album[data-playing=true]::before { animation-play-state: running }
-:root[data-round-cover] #full[data-morphing] #album::before,
-:root[data-round-cover] #full[hidden] #album::before { animation-play-state: paused }
+:root:not([data-round-cover]) #mini-art::before { background-size: cover; background-position: center }
 :root[data-round-cover] .return-cover { border-radius: 50% !important }
 .travelling-cover.round-cover-motion {
   overflow: hidden; clip-path: inset(0 round var(--round-motion-radius, 50%));
@@ -24,8 +24,8 @@
 .travelling-cover-image {
   position: absolute; inset: 0; background-image: inherit; background-color: inherit;
   background-position: center; background-size: cover; background-repeat: no-repeat;
+  transform: rotate(var(--cover-angle,0deg));
 }
-@keyframes playback-cover-turn { to { transform: rotate(360deg) } }
 .cover-setting { position: relative; cursor: pointer }
 .cover-setting input {
   position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
@@ -43,8 +43,8 @@
 }
 .cover-setting input:checked + .cover-switch-track { background: var(--accent) }
 .cover-setting input:checked + .cover-switch-track::before { transform: translateX(20px) }
-.cover-setting input:focus-visible + .cover-switch-track { outline: 2px solid var(--ink); outline-offset: 3px }
+body:not([data-input-mode=pointer]) .cover-setting input:focus-visible + .cover-switch-track { outline: 2px solid var(--ink); outline-offset: 3px }
 @media (prefers-reduced-motion: reduce) {
-  :root[data-round-cover] #album::before { animation: none }
+  #mini-art::before, :root[data-round-cover] #album::before, .travelling-cover-image { transform: none }
   .cover-switch-track, .cover-switch-track::before { transition: none }
 }

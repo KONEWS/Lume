@@ -4,6 +4,37 @@ window.lumePlain=(()=>{
   const progressStates=new WeakMap();
   const scrollStates=new WeakMap(),rowAnimations=new WeakMap();
   const fields={fontSize:'plain-font-scale',weight:'plain-font-weight',center:'plain-center',blur:'plain-blur',stagger:'plain-stagger',romaji:'plain-romaji',karaoke:'plain-karaoke',hideControls:'plain-hide-controls'};
+  function explainSettings(){
+    const romaji=get('plain-romaji');
+    romaji.options[0].textContent='自动';romaji.options[1].textContent='显示并生成';romaji.options[2].textContent='隐藏';
+    romaji.closest('label').nextElementSibling.textContent='自动显示文件提供的罗马音；“显示并生成”还会转换纯假名歌词。汉字需要歌词文件提供读音。';
+    const karaoke=get('plain-karaoke');
+    karaoke.closest('label').firstChild.textContent='逐字歌词兼容';
+    karaoke.options[0].textContent='总是兼容';karaoke.options[1].textContent='自动兼容';karaoke.options[2].textContent='关闭';
+    const note=document.createElement('small');note.textContent='没有逐字时间戳时，按整行时间生成逐字动画；自动兼容会避开过长间隔和减少动效设置。';
+    karaoke.closest('label').after(note);
+  }
+  const kanaRomaji={あ:'a',い:'i',う:'u',え:'e',お:'o',か:'ka',き:'ki',く:'ku',け:'ke',こ:'ko',さ:'sa',し:'shi',す:'su',せ:'se',そ:'so',た:'ta',ち:'chi',つ:'tsu',て:'te',と:'to',な:'na',に:'ni',ぬ:'nu',ね:'ne',の:'no',は:'ha',ひ:'hi',ふ:'fu',へ:'he',ほ:'ho',ま:'ma',み:'mi',む:'mu',め:'me',も:'mo',や:'ya',ゆ:'yu',よ:'yo',ら:'ra',り:'ri',る:'ru',れ:'re',ろ:'ro',わ:'wa',を:'o',ん:'n',が:'ga',ぎ:'gi',ぐ:'gu',げ:'ge',ご:'go',ざ:'za',じ:'ji',ず:'zu',ぜ:'ze',ぞ:'zo',だ:'da',ぢ:'ji',づ:'zu',で:'de',ど:'do',ば:'ba',び:'bi',ぶ:'bu',べ:'be',ぼ:'bo',ぱ:'pa',ぴ:'pi',ぷ:'pu',ぺ:'pe',ぽ:'po',ゔ:'vu',ぁ:'a',ぃ:'i',ぅ:'u',ぇ:'e',ぉ:'o',ゐ:'i',ゑ:'e'};
+  const smallY={ゃ:'ya',ゅ:'yu',ょ:'yo'};
+  function romanizeKana(text){
+    if(!/[\u3040-\u30ff]/.test(text)||/[\p{Script=Han}]/u.test(text))return '';
+    const hiragana=Array.from(text).map(c=>/[\u30a1-\u30f6]/.test(c)?String.fromCharCode(c.charCodeAt(0)-96):c);
+    let out='';
+    for(let i=0;i<hiragana.length;i++){
+      const c=hiragana[i],next=hiragana[i+1];
+      if(c==='っ'){const sound=kanaRomaji[next]||'';out+=sound.startsWith('ch')?'t':sound[0]||'';continue;}
+      if(c==='ー'){const vowel=out.match(/[aeiou]$/)?.[0];out+=vowel||'';continue;}
+      if((c==='は'||c==='へ')&&i>0&&(!next||/[\s\p{P}]/u.test(next))){out+=c==='は'?'wa':'e';continue;}
+      if(smallY[next]&&kanaRomaji[c]){
+        const base=kanaRomaji[c],stem={shi:'sh',chi:'ch',ji:'j'}[base];
+        out+=(stem?stem+smallY[next].slice(1):base.replace(/[aiueo]$/,'')+smallY[next]);i++;continue;
+      }
+      if(kanaRomaji[c])out+=kanaRomaji[c];
+      else if(/[\s\p{P}\p{N}]/u.test(c))out+=c;
+      else return '';
+    }
+    return out.trim();
+  }
   function preference(){return {...settings};}
   function apply(){
     const panel=get('lyrics-panel'),full=get('full');
@@ -19,7 +50,9 @@ window.lumePlain=(()=>{
   }
   function init(saved,onChange){
     changed=onChange;
+    explainSettings();
     settings={fontSize:23,weight:300,center:false,blur:true,stagger:true,romaji:'auto',karaoke:'always',hideControls:true,...saved};
+    delete settings.colors;
     settings.fontSize=Math.max(14,Math.min(42,Number(settings.fontSize)||23));
     settings.weight=Math.max(100,Math.min(900,Number(settings.weight)||300));
     for(const [key,id] of Object.entries(fields)){
@@ -34,16 +67,37 @@ window.lumePlain=(()=>{
   }
   function parse(text,parseLyrics){
     const result=parseLyrics(text);
-    for(const row of result.rows){
-      const translations=[];let romanization='';
+    for(let index=0;index<result.rows.length;index++){
+      const row=result.rows[index],translations=[];let romanization='',tagged=false;
+      const explicit=/^(?:\[(?:romaji|romanization|罗马音)\]|(?:romaji|romanization|罗马音)\s*[:：])\s*/i;
+      // Some files put the tagged reading before the Japanese line at the same
+      // timestamp. The common parser then picks it as the primary text.
+      if(!row.words?.length&&explicit.test(row.text)){
+        const lines=(row.translation||'').split('\n');
+        const japanese=lines.findIndex(line=>/[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/u.test(line));
+        if(japanese>=0){romanization=row.text.replace(explicit,'');row.text=lines.splice(japanese,1)[0];row.translation=lines.join('\n');tagged=true;}
+      }
       for(const line of (row.translation||'').split('\n')){
-        const explicit=/^(?:\[(?:romaji|romanization|罗马音)\]|(?:romaji|romanization|罗马音)\s*[:：])\s*/i;
-        if(explicit.test(line))romanization=line.replace(explicit,'');
+        if(explicit.test(line)){romanization=line.replace(explicit,'');tagged=true;}
         else if(/[\u3040-\u30ff]/.test(row.text)&&/^[a-z\s\d\p{P}āīūēōâîûêô]+$/iu.test(line)&&/[a-z]/i.test(line))romanization=line;
         else if(line)translations.push(line);
       }
       row.translation=translations.join('\n');
-      if(romanization&&settings.romaji!=='never'&&(settings.romaji==='always'||/[\u3040-\u30ff]/.test(row.text)))row.romanization=romanization;
+      if(settings.romaji!=='never'){
+        if(!romanization&&settings.romaji==='always')romanization=romanizeKana(row.text);
+        if(romanization&&(tagged||settings.romaji==='always'||/[\u3040-\u30ff]/.test(row.text)))row.romanization=romanization;
+      }
+      if(settings.karaoke!=='never'&&!row.words?.length&&row.text){
+        const pieces=row.text.match(/[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]|[^\s\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]+\s*|\s+/gu)||[];
+        const next=result.rows[index+1]?.time,available=(next??row.time+4)-row.time;
+        const eligible=settings.karaoke==='always'||(available>=.6&&available<=8&&pieces.length<=40&&!matchMedia('(prefers-reduced-motion: reduce)').matches);
+        if(eligible&&available>0&&pieces.length){
+          const span=Math.min(8,available);
+          const weights=pieces.map(piece=>/^\s+$/.test(piece)?.35:Math.min(2.5,Math.max(1,[...piece.trim()].length/3)));
+          const total=weights.reduce((sum,weight)=>sum+weight,0);let offset=0;
+          row.words=pieces.map((piece,i)=>{const startTime=row.time+span*offset/total;offset+=weights[i];return{text:piece,startTime,endTime:row.time+span*offset/total};});
+        }
+      }
     }
     return result;
   }

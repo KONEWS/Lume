@@ -2,6 +2,19 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import '../mobile/player-assets/player/listening.js';
 import '../mobile/player-assets/player/statistics-data.js';
+test('source classification and date-scoped milestones preserve unclassified history',()=>{
+  const now=+new Date('2026-11-22T12:00:00');
+  const raw=[{source:'room'},{source:'local'},{},{source:'playlist'},{source:'local',playModeSource:'room'}];
+  const all=lumeStats.normalize(raw.map((row,i)=>({...row,id:'song',session:String(i),startedAt:now-i*60000,completed:true,listenedMs:60000})));
+  assert.equal(all.filter(r=>r.playModeSource==='unknown').length,2);
+  assert.equal(all.filter(r=>r.playModeSource==='local').length,1);
+  const room=all.filter(r=>r.playModeSource==='room');
+  assert.equal(room.length,2);
+  const yesterday=lumeStats.range('day',now,'2026-11-21');
+  const empty=lumeStats.scope(room,yesterday);
+  assert(lumeStats.milestones(room,now,empty).every(([,n])=>n===0));
+  assert.equal(lumeStats.summary(lumeStats.scope(all,lumeStats.range('all',now))).count,5);
+});
 const A=globalThis.lumeStats,at=s=>+new Date(s),now=at('2027-01-02T12:00:00');
 const records=[
  {session:'old',id:'a',title:'A',artist:'Alpha',album:'First',startedAt:at('2026-11-01T22:00:00'),listenedMs:60000,completed:false,days:{'2026-11-01':60000},hours:{'2026-11-01T22':60000}},

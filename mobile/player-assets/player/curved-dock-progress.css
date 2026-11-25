@@ -1,0 +1,20 @@
+#phone-dock #mini-art { background-color: var(--studio-surface) }
+#mini-circle-progress { display: none; position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none }
+#phone-dock[data-open=nav] #mini-circle-progress { display: block }
+#mini-circle-progress { fill: none; stroke-linecap: round }
+#mini-circle-progress .circle-track { stroke: color-mix(in srgb,var(--accent) 32%,transparent); stroke-width: 1 }
+#mini-circle-progress .circle-fill { stroke: var(--accent); stroke-width: 1.5 }
+#dock-progress {
+  position: absolute;
+  z-index: 2;
+  overflow: visible;
+  pointer-events: none;
+  touch-action: none;
+}
+#phone-dock[data-open=nav] #dock-progress { display: none }
+#dock-progress :is(.curve-fill,.curve-hit) { fill: none; stroke-linecap: round; stroke-linejoin: round }
+#dock-progress .curve-fill { stroke: url(#dock-progress-gradient); stroke-width: .9 }
+#dock-progress .curve-hit { stroke: transparent; stroke-width: 18; pointer-events: stroke; cursor: pointer }
+#dock-progress:focus-visible { outline: 2px solid var(--accent); outline-offset: -3px; border-radius: inherit }
+#dock-progress .curve-start { stop-color: color-mix(in srgb,var(--accent) 76%,white) }
+#dock-progress .curve-end { stop-color: color-mix(in srgb,var(--accent) 84%,#081523) }

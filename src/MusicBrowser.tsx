@@ -1,5 +1,8 @@
 import '../mobile/player-assets/player/scan-rules.js';
+import '../mobile/player-assets/player/scan-meter.js';
+import '../mobile/player-assets/player/scan-meter.css';
 import '../mobile/player-assets/player/scan-rules.css';
+import '../mobile/player-assets/player/quality-labels.js';
 import '../mobile/player-assets/player/library-report.js';
 import '../mobile/player-assets/player/library-report.css';
 import './listening';
@@ -7,9 +10,9 @@ import '../mobile/player-assets/player/statistics-data.js';
 import '../mobile/player-assets/player/statistics.js';
 import '../mobile/player-assets/player/statistics.css';
 import type { ListeningData } from './listening';
-import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { Album, AudioLines, ChartNoAxesCombined, ChevronLeft, ChevronRight, Disc3, Folder, ScanLine, Info, Library, ListMusic, UsersRound, Play, Plus, Settings, Star } from 'lucide-react';
-import type { Playlist, RoomAction, Track } from './types';
+import { createElement, useEffect, useRef, useState, type ReactNode } from 'react';
+import { Radio, Album, ChartNoAxesCombined, ChevronLeft, ChevronRight, Disc3, Folder, ScanLine, Info, Library, ListMusic, UsersRound, Play, Plus, Settings, Star } from 'lucide-react';
+import type { Playlist, RoomAction, Track, ScanFailure } from './types';
 
 export const sections = [
   { id: 'library', label: '歌曲', icon: Disc3 },
@@ -17,6 +20,7 @@ export const sections = [
   { id: 'artists', label: '艺术家', icon: UsersRound },
   { id: 'folders', label: '文件夹', icon: Folder },
   { id: 'playlists', label: '歌单', icon: ListMusic },
+  { id: 'transfer', label: '歌曲传送', icon: Radio },
   { id: 'scan', label: '扫描音乐', icon: ScanLine },
   { id: 'sources', label: '音乐库', icon: Library },
   { id: 'stats', label: '统计', icon: ChartNoAxesCombined },
@@ -28,7 +32,7 @@ type GroupPage = 'albums' | 'artists' | 'folders';
 export function groupTitle(t: Track, page: GroupPage) {
   if (page === 'artists') return t.artist || '未知艺术家';
   if (page === 'albums') return t.album || '未知专辑';
-  return t.folder || ({ demo:'内置试听', phone:'手机曲库', import:'未提供文件夹' })[t.source];
+  return t.folder || ({ phone:'手机曲库', import:'未提供文件夹' })[t.source];
 }
 function PlaylistForm({ list, tracks, save, cancel }: {
   list?: Playlist; tracks: Track[]; save: (name: string, ids: string[]) => void; cancel: () => void;
@@ -65,10 +69,10 @@ function ScanRules({busy,pick}:{busy:boolean;pick:()=>void}){
   useEffect(()=>{ref.current?.firstElementChild?.toggleAttribute('disabled',busy);},[busy]);
   return <div ref={ref}/>;
 }
-export function MusicBrowser({ page, tracks, playlists, listening, listTracks, play, run, scan, pickBlock, busy, status, meter, version, sources, openSongs, openFavorites }: {
+export function MusicBrowser({ page, tracks, playlists, listening, listTracks, play, run, scan, stopScan, changeRoot, pickBlock, busy, status, failures, meter, version, sources, openSongs, openFavorites }: {
   page: Section; tracks: Track[]; playlists: Playlist[]; listening:ListeningData; listTracks: (songs: Track[])=>ReactNode;
-  play: (songs: Track[])=>void; run: (action: RoomAction)=>void; scan: ()=>void; pickBlock:()=>void; busy: boolean;
-  status: string; meter: {done:number;total:number}; version?: string; sources: ReactNode; openSongs: ()=>void; openFavorites: ()=>void;
+  play: (songs: Track[])=>void; run: (action: RoomAction)=>void; scan: ()=>void; stopScan:()=>void; changeRoot?:()=>void; pickBlock:()=>void; busy: boolean;
+  status: string; failures: ScanFailure[]; meter: {done:number;total:number;found:number}; version?: string; sources: ReactNode; openSongs: ()=>void; openFavorites: ()=>void;
 }) {
   const [detail,setDetail]=useState<string|null>(null);
   const [editing,setEditing]=useState(false);
@@ -89,7 +93,12 @@ export function MusicBrowser({ page, tracks, playlists, listening, listTracks, p
     else content=<><button className="button button-primary" onClick={()=>setEditing(true)}><Plus size={16}/>新建歌单</button>{row('我的收藏',tracks.filter(t=>t.favorite).length,openFavorites,<Star size={20}/>)}{playlists.map(p=><button className="browse-row" key={p.id} onClick={()=>setDetail(p.id)}><ListMusic size={20}/><strong>{p.name}</strong><span>{p.trackIds.length} 首</span><ChevronRight size={16}/></button>)}</>;
   }else if(page==='sources')content=<><Report tracks={tracks}/>{row('主机曲库',tracks.length,openSongs,<Library size={21}/>)}{sources}</>;
   else if(page==='stats')content=<Report tracks={tracks} stats listening={listening}/>;
-  else if(page==='scan')content=<><p className="collection-note">选择音乐文件夹，扫描其中及子文件夹内的音频。再次扫描会跳过已收录的文件。</p><button className="button button-primary" disabled={busy} onClick={scan}><ScanLine size={17}/>{busy?'正在导入…':'选择文件夹'}</button>{meter.total>0&&<label className="scan-progress"><span>已处理 {meter.done} / {meter.total} 首</span><progress value={meter.done} max={meter.total}/></label>}<p className="collection-note" role="status">{status}</p><ScanRules busy={busy} pick={pickBlock}/></>;
-  else if(page==='about')content=<><AudioLines size={38}/><h2>澄音 LUME</h2><p className="collection-note">局域网音乐播放器 · v{version}</p><p>在本机听歌，也可以让同一 Wi-Fi 下的设备一起播放。</p></>;
+  else if(page==='scan')content=<><p className="collection-note">选择音乐文件夹，扫描其中及子文件夹内的音频。再次扫描会沿用上次目录，仅处理变化的文件。</p><div className="scan-actions"><button className="button button-primary" disabled={busy} onClick={scan}><ScanLine size={17}/>开始扫描</button><button className="button" disabled={!busy} onClick={stopScan}>终止扫描</button>{changeRoot&&<button className="button" disabled={busy} onClick={changeRoot}>更换扫描目录</button>}</div>{busy&&createElement('lume-scan-meter',{'data-total':meter.total,'data-done':meter.done,'data-found':meter.found})}<p className="scan-result" role="status">{busy?(status.startsWith('正在导入 · ')?status.slice(7):''):status}</p>
+    {!busy&&failures.length>0&&<details className="scan-failures">
+      <summary>查看失败项（{failures.length}）</summary>
+      <ol>{failures.map((item,i)=><li key={i}><strong>{item.name}</strong><span>{item.stage} · {item.reason}</span></li>)}</ol>
+    </details>}
+    <ScanRules busy={busy} pick={pickBlock}/></>;
+  else if(page==='about')content=<><img src="/lume.png" width="38" height="38" alt=""/><h2>澄音 LUME</h2><p className="collection-note">局域网音乐播放器 · v{version}</p><p>在本机听歌，也可以让同一 Wi-Fi 下的设备一起播放。</p></>;
   return <section className="collection-page page-enter">{(detail!==null||editing)&&<button className="text-button" onClick={back}><ChevronLeft size={16}/>返回{section.label}</button>}<h1>{title}</h1>{content}</section>;
 }

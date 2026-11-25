@@ -29,19 +29,22 @@ else {
     app.setAppUserModelId('local.lume.player');
     const root = app.getAppPath();
     try {
-      const { startServer } = await import(pathToFileURL(path.join(root, 'server', 'index.mjs')).href);
+      const serverModule = import(pathToFileURL(path.join(root, 'server', 'index.mjs')).href);
+      const isolated = app.commandLine.hasSwitch('lume-isolated') && app.commandLine.hasSwitch('user-data-dir');
       const options = {
-        port: 46321, host: '0.0.0.0',
-        dataDir: app.isPackaged ? path.join(app.getPath('userData'), 'library') : path.join(root, '.lume-data'),
+        async confirmRoomInvite(name,hasListeners,signal){
+          if(!mainWindow||mainWindow.isDestroyed())return false;
+          const choice=await dialog.showMessageBox(mainWindow,{type:'question',title:'播放空间邀请',message:name+' 邀请这台电脑加入',
+            detail:'同意后将结束本机主持的空间并切换到对方空间。'+(hasListeners?'当前空间的其他听众会断开连接。':''),
+            buttons:['忽略','结束本空间并加入'],defaultId:0,cancelId:0,signal});
+          return !signal.aborted&&choice.response===1;
+        },
+        onInviteError:()=>dialog.showErrorBox('未能加入受邀空间','邀请已失效或对方不可达，请让房主重新邀请。'),
+        port: isolated ? 0 : 46321, host: isolated ? '127.0.0.1' : '0.0.0.0',
+        dataDir: isolated || app.isPackaged ? path.join(app.getPath('userData'), 'library') : path.join(root, '.lume-data'),
         staticDir: path.join(root, 'dist'),
         resourcesDir: app.isPackaged ? path.join(process.resourcesPath, 'resources') : path.join(root, 'resources')
       };
-      try { service = await startServer(options); }
-      catch (e) {
-        if (e.code !== 'EADDRINUSE') throw e;
-        service = await startServer({ ...options, port: 0 });
-      }
-      localUrl = `http://127.0.0.1:${service.port}`;
       mainWindow = new BrowserWindow({
         width: 1440, height: 960, minWidth: 880, minHeight: 640,
         title: '澄音 LUME', frame: false, show: false,
@@ -50,10 +53,19 @@ else {
         autoHideMenuBar: true,
         webPreferences: { preload: path.join(__dirname, 'preload.cjs'), nodeIntegration: false, contextIsolation: true, sandbox: true }
       });
+      const { startServer } = await serverModule;
+      try { service = await startServer(options); }
+      catch (e) {
+        if (e.code !== 'EADDRINUSE') throw e;
+        service = await startServer({ ...options, port: 0 });
+      }
+      localUrl = `http://127.0.0.1:${service.port}`;
       mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
       mainWindow.webContents.on('will-navigate', (event, url) => { if (new URL(url).origin !== localUrl) event.preventDefault(); });
       mainWindow.webContents.session.setPermissionRequestHandler((_webContents, _permission, callback) => callback(false));
-      mainWindow.once('ready-to-show', () => mainWindow.show());
+      // The local document already paints the window's launch colour. Allow
+      // it to present as soon as the DOM is ready, including an empty library.
+      mainWindow.webContents.once('dom-ready', () => mainWindow?.show());
       mainWindow.on('closed', () => { mainWindow = null; });
       const fromApp = event => mainWindow && event.sender === mainWindow.webContents;
       const checkWindowSender = event => {
@@ -105,11 +117,30 @@ else {
         return service.readLyrics(id);
       });
       let folderScan;
+      const fileImports=new Map();
       const checkScanSender=event=>{
         if(!fromApp(event)||event.senderFrame!==mainWindow.webContents.mainFrame||new URL(event.senderFrame.url).origin!==localUrl)throw Error('无效的扫描请求');
       };
       const scanSettingsPath=path.join(service.dataDir,'scan-settings.json');
       const fs=require('node:fs');
+      const scanReportPath=path.join(service.dataDir,'scan-last-result.json');
+      const validReport=report=>typeof report?.summary==='string' && Array.isArray(report.failures) &&
+        report.failures.every(row=>row&&['name','stage','reason'].every(key=>typeof row[key]==='string'));
+      ipcMain.on('lume:scan-report',event=>{
+        let report=null;
+        try{
+          checkScanSender(event);
+          const saved=JSON.parse(fs.readFileSync(scanReportPath,'utf8'));
+          if(validReport(saved))report=saved;
+        }catch{}
+        event.returnValue=report;
+      });
+      ipcMain.handle('lume:save-scan-report',(event,report)=>{
+        checkScanSender(event);
+        if(!validReport(report))throw Error('扫描结果格式无效');
+        fs.writeFileSync(scanReportPath+'.tmp',JSON.stringify(report));
+        fs.renameSync(scanReportPath+'.tmp',scanReportPath);
+      });
       ipcMain.on('lume:scan-settings',(event)=>{
         let settings=null;
         try{checkScanSender(event);settings=JSON.parse(fs.readFileSync(scanSettingsPath,'utf8'));}catch{}
@@ -123,14 +154,23 @@ else {
           fs.renameSync(scanSettingsPath+'.tmp',scanSettingsPath);
         }catch(error){console.warn('扫描设置保存失败',error.message);}
       });
-      ipcMain.handle('lume:pick-folder',async(event,blockOnly)=>{
+      require('./transfer-files.cjs')({ipcMain,dialog,mainWindow,checkWindowSender,service});
+      const directoryIndex=path.join(service.dataDir,'scan-directories.json');
+      let cachedScan={};
+      try{cachedScan=JSON.parse(fs.readFileSync(directoryIndex,'utf8'));}catch{}
+      ipcMain.handle('lume:pick-folder',async(event,blockOnly,changeRoot)=>{
         checkScanSender(event);
-        const selected=await dialog.showOpenDialog(mainWindow,{properties:['openDirectory'],title:blockOnly?'选择要屏蔽的文件夹':'扫描音乐'});
-        if(selected.canceled||!selected.filePaths.length)return null;
-        const root=selected.filePaths[0], absolute=root.split(path.sep).join('/');
+        let root=cachedScan.root;
+        if(blockOnly||changeRoot||!root||!fs.existsSync(root)){
+          const selected=await dialog.showOpenDialog(mainWindow,{properties:['openDirectory'],title:blockOnly?'选择要屏蔽的文件夹':'选择扫描目录'});
+          if(selected.canceled||!selected.filePaths.length)return null;
+          root=selected.filePaths[0];
+        }
+        const absolute=root.split(path.sep).join('/');
         if(blockOnly)return {root:absolute};
         const {DirectoryScan}=require('./directory-scan.cjs');
-        folderScan=new DirectoryScan(root);
+        folderScan?.controller.abort();
+        folderScan=new DirectoryScan(root,root===cachedScan.root?cachedScan.directories:{},service.scanKnown);
         return {root:absolute,name:folderScan.name,token:folderScan.token};
       });
       const getScan=(event,token)=>{
@@ -138,15 +178,32 @@ else {
         if(!folderScan||folderScan.token!==token)throw Error('请重新选择扫描文件夹');
         return folderScan;
       };
-      ipcMain.handle('lume:scan-entries',(event,token,dir)=>getScan(event,token).entries(dir));
+      ipcMain.handle('lume:scan-entries',(event,token,dir,skipShort)=>getScan(event,token).entries(dir,skipShort));
       ipcMain.handle('lume:scan-batch',(event,token,files,sides,body)=>{
         const scan=getScan(event,token);
-        return service.importLocal(scan.resolve(files),scan.resolve(sides),body);
+        return service.importLocal(scan.resolve(files),scan.resolve(sides),body,scan.controller.signal,scan.descriptors);
       });
-      ipcMain.handle('lume:scan-end',(event,token)=>{getScan(event,token);folderScan=undefined;});
-      ipcMain.handle('lume:import', (event,paths,attachments,body) => {
+      ipcMain.handle('lume:scan-complete',async(event,token)=>{
+        const scan=getScan(event,token);
+        const removed=await service.finishScan(scan);
+        scan.controller.signal.throwIfAborted();
+        cachedScan={root:scan.root,directories:Object.fromEntries(scan.cache)};
+        fs.writeFileSync(directoryIndex+'.tmp',JSON.stringify(cachedScan));
+        fs.renameSync(directoryIndex+'.tmp',directoryIndex);
+        return removed;
+      });
+      ipcMain.handle('lume:scan-end',(event,token)=>{
+        checkScanSender(event);
+        if(folderScan?.token===token){folderScan.controller.abort();folderScan=undefined;}
+        fileImports.get(token)?.abort();fileImports.delete(token);
+      });
+      ipcMain.handle('lume:import', async (event,paths,attachments,body,token) => {
         if(!fromApp(event)||event.senderFrame!==mainWindow.webContents.mainFrame||new URL(event.senderFrame.url).origin!==localUrl)throw Error('无效的导入请求');
-        return service.importLocal(paths,attachments,body);
+        const controller=new AbortController();
+        if(token)fileImports.set(token,controller);
+        try{return await service.importLocal(paths,attachments,body,controller.signal);}
+        finally{if(fileImports.get(token)===controller)fileImports.delete(token);}
+
       });
       ipcMain.handle('lume:join-room', async (event,id) => {
         checkWindowSender(event);

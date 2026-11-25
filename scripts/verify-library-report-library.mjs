@@ -51,13 +51,13 @@ let harness=fs.readFileSync('tests/fixtures/AndroidScanHarness.java','utf8').rep
 .replace('FakeApp app=new FakeApp();String root=',`FakeApp app=new FakeApp();
  Song legacy=new Song("Old title","old");legacy.metadataVersion=1;legacy.facts.put("bytes",123);
  check(needsMetadataRefresh(legacy),"byte-only old library must migrate");
- Song measured=new Song("Title","old");measured.facts.put("bytes",456).put("quality","lossy").put("embeddedHasLyrics",false).put("hasLyrics",false).put("factsVersion",2).put("sortMetadata",true);measured.metadataVersion=1;
+ Song measured=new Song("Title","old");measured.facts.put("bytes",456).put("quality","lossy").put("embeddedHasLyrics",false).put("hasLyrics",false).put("factsVersion",3).put("sortMetadata",true);measured.metadataVersion=1;
  legacy.hidden=true;legacy.lyricUri="sidecar.lrc";mergeMetadata(legacy,measured);
  check(!needsMetadataRefresh(legacy),"versioned migration completes");check(legacy.hidden&&legacy.facts.get("hasLyrics").equals(true),"sidecar and hidden state preserved");
  check(legacy.facts.optString("quality").equals("lossy"),"quality refreshed");
  AndroidScanHarness migration=new AndroidScanHarness(app);migration.songs.add(legacy);migration.persistSongs();
  JSONObject persisted=new JSONArray(app.prefs.getString("songs","[]")).getJSONObject(0);
- check(persisted.optJSONObject("facts").get("hasLyrics").equals(true)&&persisted.optJSONObject("facts").optInt("factsVersion")==2,"facts persisted");
+ check(persisted.optJSONObject("facts").get("hasLyrics").equals(true)&&persisted.optJSONObject("facts").optInt("factsVersion")==3,"facts persisted");
  app=new FakeApp();String root=`);
 fs.writeFileSync(path.join(dir,'AndroidScanHarness.java'),harness);
 execFileSync('javac',['-encoding','UTF-8','-d',dir,root+'ScanFilter.java',path.join(dir,'AndroidScanHarness.java')],{windowsHide:true});

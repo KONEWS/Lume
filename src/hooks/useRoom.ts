@@ -1,5 +1,6 @@
+import { OutputSynchronizer } from './syncOutput';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { Channel, Device, ImportFile, ImportResult, RoomAction, RoomState, ServerInfo } from '../types';
+import type { Channel, Device, ImportFile, ImportResult, RoomAction, RoomState, ServerInfo, Track } from '../types';
 
 const getDeviceId = () => {
   // Each tab is an independent output; duplicated tabs must not evict each other.
@@ -27,6 +28,7 @@ export function useRoom() {
   });
   const [session, setSession] = useState(0);
   const stateRef = useRef(state);
+  const currentTrackRef = useRef<Track | null>(null);
   const socket = useRef<WebSocket | null>(null);
   const offset = useRef(0);
   const audio = useRef<HTMLAudioElement | null>(null);
@@ -39,11 +41,13 @@ export function useRoom() {
   const connectedRef = useRef(false);
   const ownDeviceRef = useRef<Device | null>(null);
   const trackRef = useRef<string | null>(null);
+  const outputSync = useRef(new OutputSynchronizer());
 
   const accept = useCallback((next: RoomState) => {
     if (stateRef.current && next.serverTime < stateRef.current.serverTime) return;
     const own = next.devices.find(device => device.id === deviceId);
     if (own) ownDeviceRef.current = own;
+    currentTrackRef.current = next.tracks.find(track => track.id === next.playback.trackId) ?? null;
     stateRef.current = next; setState(next);
   }, [deviceId]);
   const request = useCallback(async (path: string, init?: RequestInit) => {
@@ -148,7 +152,7 @@ export function useRoom() {
     const latest = stateRef.current;
     if (!latest) return;
     const p = latest.playback;
-    const track = latest.tracks.find(t => t.id === p.trackId);
+    const track = currentTrackRef.current;
     const target = Math.max(0, Math.min(track?.duration || Infinity, p.position + (p.playing ? Math.max(0, Date.now() + offset.current - p.updatedAt) / 1000 : 0)));
     clock.update(Number.isFinite(target) ? target : 0);
     const el = audio.current;
@@ -158,23 +162,30 @@ export function useRoom() {
     el.volume = Math.min(1, Math.max(0, p.volume * (ownDevice?.volume ?? 1)));
     el.muted = p.muted || (ownDevice?.muted ?? false) || ownDevice?.enabled === false;
     wireChannel(ownDevice?.channel ?? 'stereo');
-    if (!p.trackId) { el.pause(); return; }
-    const mediaIdentity=(latest.guestRoom?.url||'local')+'/'+p.trackId+'/'+(track?.localAudioKey||'');
+    const beatStart=latest.calibrationSince;
+    const beat=latest.calibrating && beatStart!=null;
+    const audioId=beat?'lume-calibration':p.trackId;
+    if (!audioId) { el.pause(); return; }
+    const mediaIdentity=(latest.guestRoom?.url||'local')+'/'+audioId+'/'+(beat?'':track?.localAudioKey||'');
     if (trackRef.current !== mediaIdentity) {
       trackRef.current = mediaIdentity;
       // Different hosts may reuse a track id; keep cached local audio out of a phone session.
-      el.src = `/media/${encodeURIComponent(p.trackId)}?room=${encodeURIComponent(latest.guestRoom?.url||'local')}`;
-      el.load(); setPlaybackError(null);
+      el.src = `/media/${encodeURIComponent(audioId)}?room=${encodeURIComponent(latest.guestRoom?.url||'local')}&v=${encodeURIComponent(track?.localAudioKey||'')}`;
+      outputSync.current = new OutputSynchronizer();
+      el.loop=!!beat;el.load();setPlaybackError(null);
     }
-    if (el.readyState >= 1) {
-      const outputTarget=Math.max(0,target-(ownDevice?.delayMs??0)/1000);
-      const drift = outputTarget - el.currentTime;
-      if (Math.abs(drift) > 0.22 || !p.playing) {
-        if (Math.abs(drift) > 0.04) el.currentTime = Math.min(outputTarget, Math.max(0, (el.duration || Infinity) - 0.02));
-        el.playbackRate = 1;
-      } else el.playbackRate = Math.abs(drift) > 0.035 ? (drift > 0 ? 1.008 : 0.992) : 1;
-    }
-    const shouldPlay=p.playing&&Date.now()+offset.current>=p.updatedAt;
+    const now=Date.now()+offset.current;
+    const playing=!!beat||p.playing;
+    const position=beat?((now-beatStart)/1000)%120:p.position+(playing?(now-p.updatedAt)/1000:0);
+    const trim=ownDevice?.delayMs??0;
+    const ctx=context.current;
+    const stamp=ctx?.getOutputTimestamp?.();
+    const pipeline=stamp?.performanceTime && ctx ? ctx.currentTime-stamp.contextTime! : (ctx?.outputLatency??0);
+    const latency=Number.isFinite(pipeline)&&pipeline>=0&&pipeline<1?pipeline:0;
+    const sharedOutput = !!beat || latest.guestRoom?.status === 'joined' ||
+      latest.devices.some(device => device.id !== deviceId && device.enabled);
+    const transportTime = latest.guestRoom || beat ? undefined : p.updatedAt;
+    const shouldPlay = outputSync.current.sync(el, position, playing, trim, latency, sharedOutput, transportTime);
     if (shouldPlay && ownDevice?.enabled !== false && el.paused && !el.ended) {
       void el.play().catch(e => { if (e.name !== 'AbortError') setPlaybackError('此设备尚未开始发声，请点击「启用声音」或重新播放。'); });
     } else if (!shouldPlay || ownDevice?.enabled === false) el.pause();
@@ -198,6 +209,9 @@ export function useRoom() {
     try {
       if (!audio.current) {
         const el = new Audio(); el.preload = 'auto'; el.crossOrigin = 'anonymous';
+        // Corrections are at most 0.4%. Avoid Chromium's pitch-preserving
+        // time stretch on music while nudging the device back into sync.
+        el.preservesPitch = false;
         el.addEventListener('canplay', synchronize);
         el.addEventListener('error', () => {
           if(stateRef.current?.guestRoom&&el.src&&!new URL(el.src).searchParams.has('remote')){
@@ -208,7 +222,7 @@ export function useRoom() {
         audio.current = el;
       }
       if (!context.current) {
-        const ctx = new AudioContext({ latencyHint: 'playback' }); context.current = ctx;
+        const ctx = new AudioContext({ latencyHint: 'interactive' }); context.current = ctx;
         analyser.current = ctx.createAnalyser(); analyser.current.fftSize = 256;
         source.current = ctx.createMediaElementSource(audio.current); channel.current = null; wireChannel('stereo');
       }
@@ -233,7 +247,7 @@ export function useRoom() {
     try { await request('/api/pair', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code }) }); await refresh(); }
     catch (e) { setError((e as Error).message); }
   }, [request, refresh]);
-  const upload = useCallback(async (files: ImportFile[], scan: boolean, sidecars: {lyrics?:ImportFile; cover?:ImportFile}[], skipShort=false, token?:string) => {
+  const upload = useCallback(async (files: ImportFile[], scan: boolean, sidecars: {lyrics?:ImportFile; cover?:ImportFile}[], skipShort=false, token?:string, signal?:AbortSignal, importToken?:string) => {
     if (!files.length) return;
     setUploading(true); setUploadProgress(0); setError(null);
     try {
@@ -248,7 +262,7 @@ export function useRoom() {
         folders:scan?JSON.stringify(files.map(file=>file.webkitRelativePath.split('/').slice(0,-1).join('/'))):undefined};
       const scannedIds=(items:ImportFile[])=>items.map(f=>{if(!('scanIndex' in f))throw Error('扫描文件无效');return f.scanIndex;});
       const native=token?window.lumeDesktop!.scanBatch(token,scannedIds(files),scannedIds(attachments),body):
-        window.lumeDesktop?.importFiles(files as File[],attachments as File[],body);
+        window.lumeDesktop?.importFiles(files as File[],attachments as File[],body,importToken);
       const response = await (native ?? new Promise<ImportResult>((resolve, reject) => {
         const form=new FormData();
         (files as File[]).forEach(file=>form.append('files',file));
@@ -256,6 +270,11 @@ export function useRoom() {
         if(body.folders)form.append('folders',body.folders);
         (attachments as File[]).forEach(file=>form.append('attachments',file));
         const xhr = new XMLHttpRequest(); xhr.open('POST', '/api/upload');
+        const abort=()=>xhr.abort();
+        signal?.throwIfAborted();
+        signal?.addEventListener('abort',abort,{once:true});
+        xhr.onloadend=()=>signal?.removeEventListener('abort',abort);
+        xhr.onabort=()=>reject(new Error('已终止扫描'));
         xhr.upload.onprogress = e => { if (e.lengthComputable) setUploadProgress(Math.round(e.loaded / e.total * 100)); };
         xhr.onerror = () => reject(new Error('上传中断，请检查连接后重试'));
         xhr.onload = () => {
@@ -264,13 +283,14 @@ export function useRoom() {
         };
         xhr.send(form);
       }));
+      signal?.throwIfAborted();
       accept(response.state); setUploadProgress(100);
       if (response.rejected?.length) setError(response.rejected.map(r => `${r.name}：${r.reason}`).join('；'));
       return response;
-    } catch (e) { setError((e as Error).message); throw e; }
+    } catch (e) { if(!signal?.aborted)setError((e as Error).message); throw e; }
     finally { setUploading(false); }
   }, [accept]);
   return { analyser, state, info, connected, needsPairing, error, uploading, uploadProgress, deviceId, audioEnabled, playbackError, clock, leaveRoom,
-    currentTrack: state?.tracks.find(t => t.id === state.playback.trackId) ?? null,
+    currentTrack: currentTrackRef.current,
     action, updateDevice, upload, pair, enableAudio, clearError: () => { setError(null); setPlaybackError(null); }, refresh };
 }

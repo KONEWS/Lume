@@ -24,10 +24,13 @@ try{
   execFileSync(sevenZip,['x',executable,'-o'+temp,'$PLUGINSDIR/app-64.7z','-y'],{windowsHide:true,stdio:'pipe'});
   const payload=path.join(temp,'$PLUGINSDIR/app-64.7z');
   const unpacked=path.join(temp,'payload');
-  execFileSync(sevenZip,['x',payload,'-o'+unpacked,'resources/app.asar','-y'],{windowsHide:true,stdio:'pipe'});
+  execFileSync(sevenZip,['x',payload,'-o'+unpacked,'resources/app.asar','resources/resources/demo/*','-y'],{windowsHide:true,stdio:'pipe'});
+  const audioDir=path.join(unpacked,'resources/resources/demo');
+  assert.deepEqual(await fs.readdir(audioDir),['calibration.wav']);
+  assert((await fs.readFile(path.join(audioDir,'calibration.wav'))).equals(await fs.readFile(path.join(root,'resources/demo/calibration.wav'))));
   const archive=path.join(unpacked,'resources/app.asar');
   await walk(path.join(root,'dist'));
-  for(const relative of ['electron/main.cjs','electron/history-navigation.cjs','electron/preload.cjs','server/index.mjs','server/joined-room.mjs'])files.push(path.join(root,relative));
+  for(const relative of ['electron/main.cjs','electron/history-navigation.cjs','electron/preload.cjs','server/index.mjs','server/audio-facts.mjs','server/phone-libraries.mjs','server/joined-room.mjs'])files.push(path.join(root,relative));
   let checkedBytes=0;
   for(const file of files){
     const relative=path.relative(root,file);

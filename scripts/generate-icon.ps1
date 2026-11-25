@@ -1,30 +1,61 @@
+# Rebuild platform assets from the square artwork used by the desktop window.
+$ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Drawing
-$iconRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\resources'))
-[System.IO.Directory]::CreateDirectory($iconRoot) | Out-Null
-$bitmap = New-Object System.Drawing.Bitmap(256, 256)
-$canvas = [System.Drawing.Graphics]::FromImage($bitmap)
-$canvas.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
-$canvas.Clear([System.Drawing.Color]::FromArgb(255, 20, 30, 32))
-$bounds = New-Object System.Drawing.Rectangle(0, 0, 256, 256)
-$back = New-Object System.Drawing.Drawing2D.LinearGradientBrush($bounds, [System.Drawing.Color]::FromArgb(255, 55, 74, 69), [System.Drawing.Color]::FromArgb(255, 18, 26, 30), 55)
-$canvas.FillRectangle($back, $bounds)
-$gold = New-Object System.Drawing.Drawing2D.LinearGradientBrush($bounds, [System.Drawing.Color]::FromArgb(255, 250, 230, 177), [System.Drawing.Color]::FromArgb(255, 149, 186, 169), 90)
-$pen = New-Object System.Drawing.Pen($gold, 25)
-$pen.StartCap = [System.Drawing.Drawing2D.LineCap]::Round
-$pen.EndCap = [System.Drawing.Drawing2D.LineCap]::Round
-$canvas.DrawLine($pen, 66, 112, 66, 161)
-$canvas.DrawLine($pen, 107, 73, 107, 185)
-$canvas.DrawLine($pen, 148, 54, 148, 168)
-$canvas.DrawLine($pen, 189, 98, 189, 144)
-$stream = New-Object System.IO.MemoryStream
-$bitmap.Save($stream, [System.Drawing.Imaging.ImageFormat]::Png)
-$png = $stream.ToArray()
-[System.IO.File]::WriteAllBytes((Join-Path $iconRoot 'lume.png'), $png)
-$file = [System.IO.File]::Create((Join-Path $iconRoot 'lume.ico'))
-$writer = New-Object System.IO.BinaryWriter($file)
-$writer.Write([UInt16]0); $writer.Write([UInt16]1); $writer.Write([UInt16]1)
-$writer.Write([byte]0); $writer.Write([byte]0); $writer.Write([byte]0); $writer.Write([byte]0)
-$writer.Write([UInt16]1); $writer.Write([UInt16]32); $writer.Write([UInt32]$png.Length); $writer.Write([UInt32]22)
-$writer.Write($png)
-$writer.Dispose(); $stream.Dispose(); $canvas.Dispose(); $bitmap.Dispose(); $pen.Dispose(); $back.Dispose(); $gold.Dispose()
-Write-Output 'LUME icon created.'
+$root = Split-Path $PSScriptRoot
+$art = [Drawing.Image]::FromFile((Join-Path $root 'resources/lume.png'))
+
+function Get-IconPng([int]$size) {
+    $bitmap = [Drawing.Bitmap]::new($size, $size)
+    $canvas = [Drawing.Graphics]::FromImage($bitmap)
+    $stream = [IO.MemoryStream]::new()
+    try {
+        $canvas.InterpolationMode = [Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
+        $canvas.PixelOffsetMode = [Drawing.Drawing2D.PixelOffsetMode]::Half
+        $canvas.DrawImage($art, [Drawing.Rectangle]::new(0, 0, $size, $size))
+        $bitmap.Save($stream, [Drawing.Imaging.ImageFormat]::Png)
+        return ,$stream.ToArray()
+    } finally {
+        $stream.Dispose()
+        $canvas.Dispose()
+        $bitmap.Dispose()
+    }
+}
+
+try {
+    $targets = @{
+        'public/lume.png' = 128
+        'pc-lyrics/public/lume.png' = 128
+        'mobile/player-assets/player/lume.png' = 128
+        'mobile/harmony/AppScope/resources/base/media/lume.png' = 512
+        'mobile/android/app/src/main/res/drawable-nodpi/lume.png' = 432
+    }
+    foreach ($relative in $targets.Keys) {
+        $target = Join-Path $root $relative
+        [IO.Directory]::CreateDirectory((Split-Path $target)) | Out-Null
+        [IO.File]::WriteAllBytes($target, (Get-IconPng $targets[$relative]))
+    }
+
+    $sizes = @(16, 24, 32, 48, 64, 128, 256)
+    $images = @{}
+    $writer = [IO.BinaryWriter]::new([IO.File]::Create((Join-Path $root 'resources/lume.ico')))
+    try {
+        $writer.Write([UInt16]0)
+        $writer.Write([UInt16]1)
+        $writer.Write([UInt16]$sizes.Count)
+        $offset = 6 + 16 * $sizes.Count
+        foreach ($size in $sizes) {
+            $png = Get-IconPng $size
+            $images[$size] = $png
+            # In an ICO directory, zero represents a 256-pixel dimension.
+            $writer.Write([byte]($size % 256))
+            $writer.Write([byte]($size % 256))
+            $writer.Write([UInt16]0)
+            $writer.Write([UInt16]1)
+            $writer.Write([UInt16]32)
+            $writer.Write([UInt32]$png.Length)
+            $writer.Write([UInt32]$offset)
+            $offset += $png.Length
+        }
+        foreach ($size in $sizes) { $writer.Write([byte[]]$images[$size]) }
+    } finally { $writer.Dispose() }
+} finally { $art.Dispose() }

@@ -40,15 +40,17 @@ body .space-section-heading .room-symbol{background:transparent}
   --dock-glass:linear-gradient(140deg,var(--studio-selected),var(--studio-panel));
 }
 :root[data-phone-theme=dark]:not([data-custom-skin]) {
-  --sky-top:#274c68; --sky-side:#294252; --sky-bottom:#203c50;
-  --studio-bg:#182e40; --studio-surface:#314c60; --studio-ink:#eef7ff;
-  --studio-accent:#99ddff; --listen-line:#bddff655; --listen-pink:#ffa2c3;
+  --sky-top:#222943; --sky-side:#192337; --sky-bottom:#151a2b;
+  --studio-bg:#10121e; --studio-surface:#1d2233; --studio-ink:#f2f4fc;
+  --studio-accent:#70caff; --listen-line:#aebbe455; --listen-pink:#a7dcff;
 }
 :root[data-custom-skin] {--sky-top:var(--skin-surface);--sky-side:var(--skin-background);--sky-bottom:var(--skin-surface)}
 html body.liquid-stage {color-scheme:light; background:var(--studio-wash)}
 html[data-phone-theme=dark] body {color-scheme:dark}
-body > .lume-optics {visibility:hidden}
 body #sidebar {background:var(--studio-wash)}
+/* The dark page owns the wash. Restarting it inside the shorter drawer leaves
+   a visible rectangle where the drawer meets the dock. */
+html[data-phone-theme=dark] #sidebar {background:transparent}
 body #library-frame>header {
   position:relative; z-index:2; min-height:0;
   padding:calc(var(--lume-safe-top) + 7px) 12px 6px;
@@ -58,6 +60,16 @@ body #library-frame>header {
 .listen-page #library-frame>header.listen-scrolled {background:var(--studio-bg)}
 
 header #page-heading { font-size:20px; font-weight:660; margin:0 auto 0 4px; letter-spacing:.05em }
+#library-frame header:has(#stats-source-slot:not([hidden])) #page-heading {margin-right:0;flex:none}
+#stats-source-slot {margin-right:auto;min-width:0;pointer-events:auto}
+#stats-source-slot .stats-field {display:flex;align-items:center;min-height:44px}
+#stats-source-slot .stats-field>span {display:none}
+#stats-source-slot select {
+  box-sizing:border-box;max-width:100%;min-height:36px;padding:0 27px 0 10px;
+  padding-inline-end:27px!important;background-position:right 8px center!important;
+  font:inherit;font-size:14px;color:var(--ink);background-color:var(--studio-control);
+  border:1px solid var(--listen-line);border-radius:18px;
+}
 body #library-frame>header button {
   pointer-events:auto; display:grid; place-items:center; width:42px; height:42px;
   border-radius:50%; border:1px solid var(--listen-line); background:var(--studio-control); color:var(--ink);
@@ -65,38 +77,25 @@ body #library-frame>header button {
 #library-frame>header :is(.brand,#source) {display:none}
 .listen-page #scroll {padding:var(--lume-safe-top) clamp(12px,3.1vw,28px) calc(78px + var(--lume-safe-bottom))}
 #home:not([hidden]) {display:block;max-width:880px;margin:auto}
-.listen-feature {--disc-size:min(86vw,43dvh,386px); position:relative}
-#home .hero {
-  position:relative; display:flex; flex-direction:column; justify-content:flex-end; align-items:center;
-  min-height:0; height:calc(var(--disc-size) + 12px); width:100%; isolation:isolate;
-  padding:0 10px 5px; border:0; background:none; box-shadow:none; color:var(--ink); overflow:visible;
+#playlist-editor {transition:none}
+#playlist-editor[open] {transform:none;animation:song-sheet-enter .26s cubic-bezier(.2,.8,.2,1)}
+#playlist-editor[open]::backdrop {animation:song-shade-enter .22s ease}
+#playlist-editor[data-closing],#song-actions[data-closing] {pointer-events:none}
+:is(#playlist-editor,#song-actions)[data-closing]::backdrop {opacity:0;transition:opacity .22s}
+#playlist-editor .playlist-picker {display:flex;flex-direction:column;gap:12px;height:min(65dvh,580px);min-height:0}
+.playlist-picker h2,.playlist-picker .playlist-actions {margin:0}
+#playlist-editor .playlist-picker input[type=search] {margin:0;min-height:42px}
+.playlist-options {flex:1;min-height:0;overflow:auto;overscroll-behavior:contain}
+#playlist-editor .playlist-options label {display:flex;align-items:center;gap:14px;min-height:52px;padding:6px 4px;border-bottom:1px solid var(--studio-line);content-visibility:auto;contain-intrinsic-size:auto 52px}
+.playlist-options input {width:20px;height:20px;flex:none;accent-color:var(--studio-accent)}
+.playlist-options label:has(input:disabled) {opacity:.55}
+.playlist-options span {min-width:0}
+.playlist-options :is(strong,small) {display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.playlist-options small {color:var(--studio-muted);margin-top:3px}
+@media(prefers-reduced-motion:reduce){
+  #playlist-editor[open],#playlist-editor[open]::backdrop {animation:none}
 }
-#home .hero::before {display:none}
-.listen-disc {
-  position:absolute; top:4px; left:50%; transform:translateX(-50%); z-index:-1;
-  display:grid; place-items:center; overflow:hidden; width:var(--disc-size); aspect-ratio:1; border-radius:50%;
-  border:clamp(4px,1.65vw,8px) solid #f4fbff9c;
-  background:conic-gradient(from 18deg, #edfaff16, #97c4e22e 22%, #e4f5ff55 46%, #75a1bd38 65%, #f5fbff42 87%, #edfaff16);
-  box-shadow:inset 1px 2px 5px #5f98b65c,inset -1px -1px 4px #fff7,0 3px 12px #60879e38;
-}
-.disc-groove {position:absolute;inset:6%;border-radius:inherit;transform:rotate(-35deg);
-  background:conic-gradient(transparent 0 37%,#effaffad 37% 51%,transparent 51% 88%,#effaffbd 88% 100%);
-  -webkit-mask:radial-gradient(closest-side,transparent calc(100% - 7px),#000 calc(100% - 6px));mask:radial-gradient(closest-side,transparent calc(100% - 7px),#000 calc(100% - 6px));
-}
-#home .listen-disc .hero-cover {
-  position:relative; display:block; width:25%; max-width:none; aspect-ratio:1; border-radius:50%;
-  background-position:center; background-size:cover; border:clamp(4px,1.4vw,7px) solid #ecf9ffb8;
-  box-shadow:0 2px 6px #5989a548,inset 0 0 0 100px #afd7ec65; outline:0;
-}
-.hero-cover::after {content:'';position:absolute;inset:38%;border-radius:50%;background:#d9edf5;box-shadow:0 0 0 1px #a3c8de}
-#home .hero-info {position:relative;inset:auto;width:100%;text-align:center;justify-self:center}
-#home .hero-info strong {font-size:clamp(19px,4.8vw,25px);line-height:1.4;letter-spacing:.01em}
-#home .hero-info small {min-height:1.3em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:13px}
-#home .hero-info lume-song-title>span {margin-inline:auto}
-#home-pages {display:flex;justify-content:center;align-items:center;min-height:28px}
-.home-dot {display:grid;place-items:center;min-width:20px;height:30px}
-.home-dot::after {content:'';width:7px;height:7px;background:#f4fbffc2;border-radius:12px}
-.home-dot[aria-pressed=true]::after {width:23px;background:white;box-shadow:0 1px 4px #769cb23b}
+#home-feature.swipeable {touch-action:pan-y pinch-zoom}
 .home-actions {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:clamp(6px,3vw,22px);margin:clamp(14px,3.7vh,34px) 2px clamp(19px,3.2vh,32px)}
 .home-actions button {display:flex;align-items:center;justify-content:center;gap:5px;min-height:44px;white-space:nowrap;font-size:clamp(12px,3.3vw,15px);border:1px solid var(--listen-line);border-radius:28px;background:var(--studio-control)}
 .home-actions svg {width:17px;height:17px;color:var(--listen-pink)}
@@ -139,6 +138,8 @@ body #dock-tabs button {flex-direction:column;align-items:center;justify-content
 body #dock-tabs button[aria-current=page] {color:var(--studio-accent)}
 body #phone-dock[data-open=nav] #mini {padding:0;background:radial-gradient(circle at 40% 30%,#bbe5fd,#83b7d5)}
 body #phone-dock[data-open=nav] #mini-art {width:42px;height:42px;border:2px solid #f3fbffb8}
+html[data-phone-theme=dark] #phone-dock[data-open=nav] #mini {background:var(--dock-glass)}
+html[data-phone-theme=dark] #phone-dock[data-open=nav] #mini-art {border-color:var(--listen-line)}
 @media(min-width:700px) {
   .home-sections {grid-template-columns:repeat(2,minmax(0,1fr));gap:22px}
   .home-actions {max-width:520px;margin-inline:auto}
@@ -148,28 +149,13 @@ body #phone-dock[data-open=nav] #mini-art {width:42px;height:42px;border:2px sol
   .home-actions {margin-block:10px}
 }
 
-/* A missing embedded cover uses the translucent record. An available sleeve
-   occupies the same hero and dissolves into the page underneath the credits. */
-#home .hero-cover {background-blend-mode:luminosity}
-#home .hero-cover:not([style*="data:image"],[style*="covers/"]) {background-image:none !important;background-color:#87bad74d}
-#home .listen-disc:has(.hero-cover:is([style*="data:image"],[style*="covers/"])) {
-  inset:calc(-1 * var(--lume-safe-top)) calc(-1 * clamp(12px,3.1vw,28px)) -8px;
-  width:auto;aspect-ratio:auto;transform:none;border:0;border-radius:0;box-shadow:none;
-  background:none;mask-image:linear-gradient(#000 45%,#000c 68%,transparent);
-  -webkit-mask-image:linear-gradient(#000 45%,#000c 68%,transparent);
-}
-#home .listen-disc:has(.hero-cover:is([style*="data:image"],[style*="covers/"])) .disc-groove,
-#home .hero-cover:is([style*="data:image"],[style*="covers/"])::after {display:none}
-#home .listen-disc .hero-cover:is([style*="data:image"],[style*="covers/"]) {
-  position:absolute;inset:0;width:100%;height:100%;aspect-ratio:auto;border:0;border-radius:0;
-  background-blend-mode:normal;box-shadow:inset 0 76px 75px -65px #e2f1f7;
-}
 .listen-page header #page-heading {text-shadow:none}
 
 body #phone-dock::before {
   content:'';position:absolute;inset:-8px 0 0;pointer-events:none;
   background:linear-gradient(transparent,var(--studio-panel) 75%,var(--studio-surface));
 }
+html[data-phone-theme=dark] #phone-dock::before {content:none}
 
 @media (orientation:landscape) {
   body {padding-inline:0}
@@ -181,15 +167,7 @@ body #phone-dock::before {
                    calc(clamp(16px,4.5vw,32px) + var(--lume-safe-right));
   }
   html body #library-frame>#sidebar {padding-left:calc(16px + var(--lume-safe-left))}
-  #library-frame>#locate-current {right:max(calc(18px + var(--lume-safe-right)),calc((100% - 630px)/2))}
-  /* Keep the sleeve centred on the viewport, even on wider phones where
-     the shelves stop growing. Only the content inside the page needs insets. */
-  #home .listen-disc:has(.hero-cover:is([style*="data:image"],[style*="covers/"])) {
-    left:50%;right:auto;width:100vw;transform:translateX(-50%);
-  }
-  #home :is(.hero-info,.home-actions,.home-sections) {
-    padding-inline:var(--lume-safe-left) var(--lume-safe-right);
-  }
+  #library-frame>:is(#locate-current,#playlist-add) {right:max(calc(18px + var(--lume-safe-right)),calc((100% - 630px)/2))}
   html body #phone-dock {padding-inline:10px}
   body #phone-dock::before {content:none}
 }
@@ -201,7 +179,7 @@ body #dock-tabs button {display:flex;min-width:0;white-space:nowrap;touch-action
 #browse:not(:has(.drawer-range-setting)) #browse-title {
   position:absolute;width:1px;height:1px;padding:0;margin:0;overflow:hidden;clip-path:inset(50%);
 }
-#library-frame > #locate-current {bottom:calc(72px + var(--lume-safe-bottom))}
+#library-frame > :is(#locate-current,#playlist-add) {bottom:calc(72px + var(--lume-safe-bottom))}
 html body #full:not(:has(#folia-stage:not([hidden]))),html body .morph-material {background:var(--studio-wash)}
 html body #scroll :is(.search,.space-device,.output-device,.library-chart,.play-period),
 html body #scroll .collection-row {
@@ -235,3 +213,16 @@ html body :is(dialog.song-action-sheet,#queue-sheet,.list-editor,#room-invite) {
 #space .output-device summary {padding:12px 0 4px;font-size:13px;color:var(--muted);min-height:44px}
 #space .output-device details p {font-size:12px;color:var(--muted);margin:4px 0}
 #space .output-device details p:empty {display:none}
+/* Space cards and actions use their tinted fill for separation. A shared
+   light keyline becomes a conspicuous outline with cover-derived palettes. */
+html body #space :is(.space-device,.output-device,.pill,#space-tools .icon,#requests>div) {
+  border:0;box-shadow:none;
+}
+#space .output-device details {border-top:0}
+#space > lume-personal-devices {border:0;box-shadow:none}
+
+/* Reserve the same header control box on standard navigation pages, with or without a source selector. */
+@media(orientation:portrait){
+  body:not(.listen-page) #library-frame>header>button{min-height:44px}
+}
+#browse-content{--browse-content-lead:0.5rem}

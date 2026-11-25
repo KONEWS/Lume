@@ -1,16 +1,13 @@
+import { util } from '@kit.ArkTS';
 import { http } from '@kit.NetworkKit';
 import { PhoneSource, Transfer } from './PhoneSource';
 import { PcmOutput } from './PcmOutput';
 import { LocalAudio } from './LocalAudio';
 import { Song } from './LocalLibrary';
-import { deviceInfo, systemDateTime } from '@kit.BasicServicesKit';
+import { systemDateTime } from '@kit.BasicServicesKit';
+import { phoneModel } from './DeviceModel';
 
-import { util } from '@kit.ArkTS';
 
-const market = deviceInfo.marketName.trim();
-const model = deviceInfo.productModel.trim();
-export const phoneModel = [market,model].filter((s:string)=>s.length>0 && s.toLowerCase()!=='unknown')
-  .filter((s:string,i:number,items:string[])=>items.indexOf(s)===i).join(' · ') || '鸿蒙手机';
 
 export interface Skin {name:string; background:string; surface:string; ink:string; accent:string;}
 export interface Ticket {id:string;platform:string;name?:string}
@@ -20,6 +17,8 @@ export interface TrackDetails {id:string;cover:string;lyrics:string;lyricsSource
 export interface Completion {eventId?:string;id?:string;duration?:number;at?:number}
 export interface PlayRecord {session:string;id:string;title:string;startedAt:number;completed:boolean;completedAt?:number}
 export interface Snapshot {
+  hostAddress?:string;
+  currentSession?:string;
   audioIdentity?:string;audioBytes?:number;localSong?:Song|null;localTrackId?:string;
   detailToken?:string;roomDetails?:TrackDetails;completion?:Completion;playRecords?:PlayRecord[];
   playMode?:string;shuffle?:boolean;
@@ -59,6 +58,13 @@ export class Receiver {
       return response;
     }finally{client.destroy();}
   }
+  async catalogCover(id:string,revision:string,visible:string):Promise<string>{
+    if(!this.auth||!/^[A-Za-z0-9_-]+$/.test(id)||!/^[a-f0-9]{32}$/.test(revision))return '';
+    const generation=this.generation;
+    const hint=visible.length<=1024 && /^[A-Za-z0-9_,-]+$/.test(visible)?'?visible='+encodeURIComponent(visible):'';
+    const response=await this.get('/api/catalog-cover/'+revision+'/'+id+hint,this.base,this.auth);
+    return generation===this.generation?String(response.result):'';
+  }
   private async loadDetails(s:Snapshot,gen:number):Promise<void>{
     const id=s.trackId,token=s.detailToken??'',key=id+'/'+token;
     if(!id)return;
@@ -93,6 +99,7 @@ export class Receiver {
   private onState:(s:Snapshot)=>void;
   private base: string = '';
   private auth: string = '';
+  private controlWrites:Promise<void>=Promise.resolve();
 
   private notify: Status;
   private onSkin: (s?: Skin)=>void;
@@ -109,9 +116,19 @@ export class Receiver {
       return response;
     } finally { client.destroy(); }
   }
-  async connect(host: string, pin: string, profile:string, inviteToken:string='', deviceId:string=''): Promise<void> {
+  async prepareInvite(base:string,inviteToken:string,deviceId:string):Promise<string[]> {
+    const result=await this.post(base,'/api/join/invite',JSON.stringify({inviteToken:inviteToken,deviceId:deviceId}),'');
+    const match=(String(result.cookies)+' '+JSON.stringify(result.header)).match(/lume_session=[a-f0-9]+/);
+    if(!match)throw new Error('邀请已失效');
+    const id='native-'+util.generateRandomUUID();
+    const reply=await this.post(base,'/api/receiver',JSON.stringify({id:id,platform:'HarmonyOS',model:phoneModel}),match[0]);
+    const snapshot=JSON.parse(String(reply.result)) as Snapshot;
+    if(typeof snapshot.trackId!=='string'||!Array.isArray(snapshot.outputs))throw new Error('空间尚未就绪');
+    return [id,match[0]];
+  }
+  async connect(host: string, pin: string, profile:string, inviteToken:string='', deviceId:string='',prepared?:string[]): Promise<void> {
     this.stop();
-    this.profile=profile;this.id='native-'+util.generateRandomUUID();
+    this.profile=profile;this.id=prepared?prepared[0]:'native-'+util.generateRandomUUID();
     const gen = this.generation;
     const base = (host.startsWith('http://')?host:'http://'+host).trim().replace(/\/$/,'');
     if (!/^http:\/\/[\w.-]+(:\d{1,5})?$/.test(base) || (pin!=='' && !/^\d{6}$/.test(pin))) {
@@ -119,6 +136,7 @@ export class Receiver {
     }
     this.notify(inviteToken?'正在接受邀请':pin?'正在连接':'等待主机允许加入','','');
     try {
+      if(prepared){this.base=base;this.auth=prepared[1];await this.poll(gen);return;}
       let result:http.HttpResponse;
       if(inviteToken){
         try{result=await this.post(base,'/api/join/invite',JSON.stringify({inviteToken:inviteToken,deviceId:deviceId}),'');}
@@ -148,7 +166,13 @@ export class Receiver {
   }
   async command(body:string):Promise<void>{
     if(!this.auth)return;
-    try{await this.post(this.base,'/api/action',body,this.auth);}
+    const gen=this.generation;
+    const write=async():Promise<void>=>{
+      if(this.generation===gen)await this.post(this.base,'/api/action',body,this.auth);
+    };
+    const tail=this.controlWrites.catch(()=>{}).then(write);
+    this.controlWrites=tail;
+    try{await tail;}
     catch(e){this.notify((e as Error).message,'',this.latest?.channel??'');}
   }
   // Same monotonic presentation clock and output delay as PcmOutput.

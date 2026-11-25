@@ -31,8 +31,6 @@ body, .app-shell, .app-shell.daylight, .pairing-screen { background: var(--studi
 }
 .music-side nav button:hover { background: var(--studio-control) }
 .music-side nav button[aria-current=page] { background: var(--studio-selected); border-color: var(--studio-keyline) }
-.app-shell .brand-symbol, .pairing-screen .brand-symbol { background: var(--studio-selected); border: 1px solid var(--studio-keyline); box-shadow: none }
-.brand-symbol i { background: var(--studio-accent) }
 .app-shell .brand-word, .app-shell .brand-word span, .app-shell .rail-utilities button { color: var(--text) }
 .app-shell :is(.track-row,.album-meta,.player-bar,.sidebar) { text-shadow: none }
 .app-shell :is(.glass,.device-add,.stats-grid>div), body.acrylic.liquid-stage .app-shell [data-glass],
@@ -107,3 +105,8 @@ body .app-shell .modal, body .pairing-card.glass {
   .app-shell .topbar { gap: 5px; margin-bottom: 5px }
   .listen-stage { min-height: 300px }
 }
+
+.collection-page .scan-actions { display:flex; flex-wrap:wrap; gap:10px; margin-block:14px }
+.collection-page .scan-actions .button { min-height:40px; padding-inline:16px }
+.collection-page .scan-actions .button:disabled { opacity:.45 }
+.collection-page .scan-actions .button:not(:disabled) { color:var(--studio-accent); border-color:var(--studio-keyline) }

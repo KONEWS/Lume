@@ -6,7 +6,6 @@ body, body.liquid-stage, :root[data-phone-theme=light]:not([data-custom-skin]) b
 }
 body :is(h1,h2,.meta), body.liquid-stage :is(h1,h2,.meta) { text-shadow: none }
 #library-frame>header { padding: 8px 16px; border-bottom: 1px solid var(--studio-line) }
-.brand i, .brand i::after { border-color: var(--accent) }
 #source { color: var(--muted); letter-spacing: 0 }
 #scroll { padding: 14px clamp(16px,4.5vw,32px) 18px }
 #scroll h1 { margin: 6px 0 14px; font-size: 26px; font-weight: 650; letter-spacing: -.02em }
@@ -118,7 +117,7 @@ html body #phone-dock #dock-tabs {
 #phone-dock #mini-art { flex: none; width: 42px; height: 42px; border-radius: 50% }
 #phone-dock #mini .icon { border-radius: 50% }
 #phone-dock[data-open=nav] .mini-track { justify-content: center }
-#phone-dock[data-open=nav] :is(#dock-nav-button,.mini-track .meta,#mini .icon,#mini-progress),
+#phone-dock[data-open=nav] :is(#dock-nav-button,.mini-track .meta,#mini .icon),
 #phone-dock[data-open=mini] #dock-tabs { display: none }
 @media (max-width:350px) {
   #phone-dock { --dock-gap: 5px; padding-inline: 5px }

@@ -14,6 +14,7 @@ function initLibraryLocate(){
   }
   function refresh(){
     if(highlighted&&(!highlighted.isConnected||highlightId!==state.id||highlightSource!==sourceKey()))clear();
+    updateLibraryIndex();
   }
   button.onclick=()=>{
     cancelAnimationFrame(frame);clear();

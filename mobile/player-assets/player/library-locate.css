@@ -2,12 +2,16 @@
 #scroll .library-heading h1 {margin:0}
 /* The frame ends above the dock, whose layout already includes native safe insets.
    Keep this control outside the scroller so it never scrolls away or clips. */
-#locate-current {display:none;position:absolute;z-index:2;right:max(18px,calc((100% - 630px)/2));bottom:16px;align-items:center;justify-content:center;width:52px;height:52px;padding:0;border:1px solid var(--studio-keyline);border-radius:50%;background:var(--studio-surface);color:var(--studio-accent);box-shadow:0 4px 16px color-mix(in srgb,var(--studio-ink) 16%,transparent);touch-action:manipulation}
+:is(#locate-current,#playlist-add) {display:none;position:absolute;z-index:2;right:max(18px,calc((100% - 630px)/2));bottom:16px;align-items:center;justify-content:center;width:52px;height:52px;padding:0;border:1px solid var(--studio-keyline);border-radius:50%;background:var(--studio-surface);color:var(--studio-accent);box-shadow:0 4px 16px color-mix(in srgb,var(--studio-ink) 16%,transparent);touch-action:manipulation}
+#locate-current {box-shadow:none}
+#locate-current:focus-visible {outline:2px solid var(--studio-accent);outline-offset:2px}
+#locate-current:active {background:var(--studio-control)}
 #library-frame:has(#library:not([hidden])) > #locate-current {display:flex}
-body:is(.drawer-open,.drawer-dragging) #locate-current {visibility:hidden}
-#locate-current svg {width:24px;height:24px;pointer-events:none}
+body:is(.drawer-open,.drawer-dragging) :is(#locate-current,#playlist-add) {visibility:hidden}
+:is(#locate-current,#playlist-add) svg {width:24px;height:24px;pointer-events:none}
 /* Let even the final song and its menu scroll completely above the button. */
-#library {padding-bottom:76px}
+#library,#browse[data-playlist] {padding-bottom:76px}
+#library-frame:has(#browse[data-playlist]:not([hidden])) > #playlist-add {display:flex}
 #library-list,.song,.song > .song-play,.song > .end {background:transparent}
 /* Rows retain their themed min-height while offscreen controls and art skip layout and paint. */
 #library-list > .song {content-visibility:auto;contain-intrinsic-block-size:auto 0px}

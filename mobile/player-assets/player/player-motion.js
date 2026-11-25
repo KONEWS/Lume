@@ -1,4 +1,40 @@
 const quietMotion = matchMedia('(prefers-reduced-motion: reduce)');
+function isCollectionDetail(){
+  return tab==='browse' && browseDetail!==null && ['artists','albums','folders','playlists'].includes(browsePage);
+}
+
+function bindDetailDismiss(surface,active,scrollTop,close){
+  let start=null;
+  surface.addEventListener('touchstart',e=>{
+    start=null;
+    if(e.touches.length!==1 || !active() || e.target.closest('input,select,textarea,button,.seek-rail,[role="slider"],.collection-index'))return;
+    const t=e.touches[0];
+    start={id:t.identifier,x:t.clientX,y:t.clientY,top:scrollTop()<=1,axis:''};
+  },{passive:true});
+  surface.addEventListener('touchmove',e=>{
+    if(!start)return;
+    const t=e.touches[0];
+    if(e.touches.length!==1 || t.identifier!==start.id || !active()){start=null;return;}
+    const dx=t.clientX-start.x,dy=t.clientY-start.y;
+    if(!start.axis){
+      if(Math.max(Math.abs(dx),Math.abs(dy))<10)return;
+      if(start.top && dy>Math.abs(dx)*1.35)start.axis='down';
+      else if(dx>Math.abs(dy)*1.35)start.axis='right';
+      else{start=null;return;}
+    }
+    if(e.cancelable)e.preventDefault();else start=null;
+  },{passive:false});
+  surface.addEventListener('touchend',e=>{
+    const drag=start;start=null;
+    if(!drag?.axis||!active())return;
+    const t=Array.from(e.changedTouches).find(t=>t.identifier===drag.id);
+    if(t && (drag.axis==='down'?t.clientY-drag.y:t.clientX-drag.x)>=64){
+      if(e.cancelable)e.preventDefault();
+      close();
+    }
+  },{passive:false});
+  surface.addEventListener('touchcancel',()=>{start=null;});
+}
 let playerMotion = null;
 let lyricMotion = null;
 let lastAlbumBox;
@@ -11,7 +47,7 @@ function playerSettleDuration(open, distance) {
 // follows the finger even though its parent is also moving.
 function createPlayerDrag(initial, finished) {
   const page = $('full'), album = $('album'), source = $('mini-art');
-  if (album.hidden) return createPlayerMotion(initial, finished);
+  if (album.hidden || !document.documentElement.hasAttribute('data-round-cover')) return createPlayerMotion(initial, finished);
   const bounds = page.getBoundingClientRect(), art = album.getBoundingClientRect();
   const thumb = source.getBoundingClientRect(), bar = $('mini').getBoundingClientRect();
   if (!art.width || !thumb.width) return createPlayerMotion(initial, finished);
@@ -259,7 +295,7 @@ function bindPlayerSwipes() {
     if (event.touches.length !== 1) { cancel(); return; }
     const target=event.target;
     const homeSwipe=tab==='home'&&!expanded&&!drawerOpen&&target.closest('#home,#phone-dock');
-    if (playerMotion || target.closest('input,select,textarea,.seek-rail,dialog') ||
+    if (playerMotion || target.closest('input,select,textarea,.seek-rail,#dock-progress,dialog') || (expanded && target.closest('button:not(#album),[role="slider"]')) ||
         (!homeSwipe&&!target.closest(expanded ? '#full' : '#mini'))) return;
     const finger=event.touches[0];
     const scroller=target.closest('#lyrics-panel,#full');
@@ -320,7 +356,8 @@ function bindPlayerSwipes() {
       const speed=elapsed>0 && elapsed<=150 ? (end.clientY-y)/elapsed : 0;
       const progress=Number(drag.open)-dy/drag.motion.travel;
       const flick=Math.abs(dy)>=18 && Math.abs(speed)>=.55;
-      player(flick ? speed<0 : progress>=.5,-speed/drag.motion.travel);
+      const closeEnough=drag.open && dy>=Math.min(100,innerHeight*.13);
+      player(closeEnough?false:flick ? speed<0 : progress>=.5,-speed/drag.motion.travel);
     } else if (drag.axis==='horizontal' && Math.abs(dx)>48) {
       if(drag.open)swipeLyricPage(dx);
       else if(drag.miniTitle)command(dx<0?'next':'previous');

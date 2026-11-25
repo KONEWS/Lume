@@ -8,15 +8,15 @@
     installed.add(doc);
     const css = doc.createElement('link');
     css.rel = 'stylesheet'; css.href = stylesheet; doc.head.append(css);
-    const isSearch = node => node?.matches?.('input[type="search"]') === true;
-    const blockDefault = event => {if (!isSearch(event.target)) event.preventDefault();};
+    const canSelectText = node => node?.matches?.('input[type="search"], #lume-device-name') === true;
+    const blockDefault = event => {if (!canSelectText(event.target)) event.preventDefault();};
     doc.addEventListener('selectstart', blockDefault, true);
     doc.addEventListener('contextmenu', blockDefault, true);
     function clearSelection() {
       const input = doc.activeElement;
-      if (isSearch(input)) return;
+      if (canSelectText(input)) return;
       // Some WebViews allow selection inside text inputs despite user-select:none.
-      // Keep the caret and keyboard editing, but collapse a non-search text range.
+      // Keep the caret and keyboard editing, but collapse a text range outside editable selection fields.
       if (input && typeof input.selectionStart === 'number' && input.selectionStart !== input.selectionEnd) {
         input.setSelectionRange(input.selectionEnd, input.selectionEnd);
       }

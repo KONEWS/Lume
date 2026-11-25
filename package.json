@@ -54,12 +54,13 @@
     "extraResources": [
       {
         "from": "resources",
-        "to": "resources"
+        "to": "resources",
+        "filter": ["**/*", "!lume-personal.exe", "!lume-device-host.exe"]
       }
     ],
     "win": {
       "target": "portable",
-      "signAndEditExecutable": false,
+      "signExecutable": false,
       "icon": "resources/lume.ico"
     },
     "artifactName": "Lume-${version}-Windows.${ext}"

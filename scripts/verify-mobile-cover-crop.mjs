@@ -102,7 +102,7 @@ try{
         assert.equal(!!data.crop,pad>0,'only the padded fixture needs a content crop');
         // Freeze the real CSS rotor at multiple angles, including diagonal edges.
         for(const angle of [0,45,123]){
-          await evaluate(`$('album').getAnimations({subtree:true}).forEach(a=>{a.pause();a.currentTime=${angle/360*24000}})`);
+          await evaluate(`$('album').style.setProperty('--cover-angle','${angle}deg')`);
           const file=`${platform}-${width}-${name}-${angle}`;
           await screenshot(file);
           results.push({platform,width,height,fixture:name,angle,file:file+'.png',album:data});
@@ -124,7 +124,7 @@ try{
     await evaluate('lumeUpdate({playing:false})'); await pause(30); const stopped=await turn(); await pause(100);
     assert.equal(await turn(),stopped);
     await close();
-    await evaluate('navigate("home");preparePlayerMotion()');
+    await evaluate('navigate("home");preparePlayerMotion(createPlayerMotion)');
     const transition=await evaluate(`(()=>{const out=[];for(const p of [0,.5,1]){playerMotion.seek(p);const e=document.querySelector('.travelling-cover'),c=getComputedStyle(e);out.push({p,clip:c.clipPath,radius:c.borderRadius});}return out})()`);
     assert.match(transition[2].clip,/50%/);
     await open();

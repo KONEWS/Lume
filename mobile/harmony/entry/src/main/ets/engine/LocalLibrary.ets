@@ -8,6 +8,7 @@ import { ScanFilter } from './ScanFilter';
 
 interface AudioFacts {fileName?:string; duration?:number; year?:string; trackNumber?:string; discNumber?:string; modifiedAt?:number; addedAt?:number; sortMetadata?:boolean; bytes?:number; quality?:string; hasLyrics?:boolean; factsVersion?:number; playCount?:number; hidden?:boolean}
 interface AudioTags extends AudioFacts {title?:string; artist?:string; album?:string; albumArtist?:string}
+interface ScanDirectory {stamp:string; names:string[]}
 interface ScanFile {uri:string; folder:string; stem:string; stamp?:string}
 export interface HostSong extends AudioFacts { hasSideCover?:boolean; hasSideLyrics?:boolean; id:string; title:string; path:string; artist?:string; album?:string; folder?:string }
 export interface Song extends AudioFacts { id:string; title:string; artist?:string; album?:string; metadataVersion?:number; folder?:string; sourceUri?:string; lyricsFile?:string; coverFile?:string; coverUri?:string; scanStamp?:string; lyricUri?:string; lyricStamp?:string; coverStamp?:string; embeddedHasLyrics?:boolean }
@@ -30,6 +31,15 @@ export class LocalLibrary {
     const f=fs.openSync(tmp,fs.OpenMode.CREATE|fs.OpenMode.WRITE_ONLY|fs.OpenMode.TRUNC);
     try{fs.writeSync(f.fd,JSON.stringify(this.songs));}finally{fs.closeSync(f);}
     fs.renameSync(tmp,this.manifest);this.revision++;this.changed();
+  }
+  receivePersonal(file:string,title:string,ext:string):void{
+    const id='received-'+file.split('.')[0];
+    if(this.songs.some((s:Song)=>s.id===id))return;
+    const song:Song={id:id,title:title,folder:'局域网接收',fileName:title+'.'+ext,addedAt:Date.now()};
+    const path=this.context.filesDir+'/'+id;
+    if(!fs.accessSync(path))fs.renameSync(this.context.filesDir+'/received/'+file,path);
+    this.facts(song,path,title+'.'+ext);this.songs.push(song);
+    try{this.saveSongs();}catch(e){this.songs.pop();throw new Error((e as Error).message);}
   }
   async hideSong(song:Song):Promise<void>{
     song.hidden=true;this.order=this.order.filter((id:string)=>id!==song.id);this.playNext=this.playNext.filter((id:string)=>id!==song.id);
@@ -76,11 +86,13 @@ export class LocalLibrary {
   private manifest:string;
   private scanRoots:string[]=[];
   private rootWarning:string='';
+  private directoryCache:Record<string,ScanDirectory>={};
   private shortCache:Record<string,string>={};
   private legacyFill?:Promise<void>;
   counts:Record<string,number>={};
   revision:number=0;
   scanTotal:number=0;
+  scanTotalKnown:boolean=false;
   scanDone:number=0;
   scanFound:number=0;
   scanRead:number=0;
@@ -91,7 +103,7 @@ export class LocalLibrary {
       '1|'+stat.size+'|'+(stat.mtimeNs?.toString()??String(stat.mtime))+'|'+(stat.ctimeNs?.toString()??String(stat.ctime??''))+'|'+(stat.ino?.toString()??'')+'|'+name:'';
   }
   private static needsFacts(song:Song):boolean{
-    return song.bytes===undefined||song.metadataVersion!==1||song.factsVersion!==2||!song.sortMetadata;
+    return song.bytes===undefined||song.metadataVersion!==1||song.factsVersion!==3||!song.sortMetadata;
   }
   private lastScanNotice:number=0;
   private reportScan():void{
@@ -110,7 +122,7 @@ export class LocalLibrary {
   private applyFacts(song:Song,facts:AudioFacts):void{
     if(facts.bytes!==undefined)song.bytes=facts.bytes;
     if(facts.quality!==undefined)song.quality=facts.quality;
-    if(facts.factsVersion===2||facts.hasLyrics!==undefined)song.embeddedHasLyrics=facts.hasLyrics;
+    if((facts.factsVersion??0)>=2||facts.hasLyrics!==undefined)song.embeddedHasLyrics=facts.hasLyrics;
     song.hasLyrics=song.lyricsFile?true:song.embeddedHasLyrics;
     if(facts.factsVersion!==undefined)song.factsVersion=facts.factsVersion;
   }
@@ -144,17 +156,18 @@ export class LocalLibrary {
     song.sortMetadata=true;
     return duration;
   }
-  constructor(context:common.UIAbilityContext,changed:()=>void){
+  constructor(context:common.UIAbilityContext,changed:()=>void,deviceName:string="鸿蒙手机"){
     this.context=context;this.changed=changed;this.manifest=context.filesDir+'/music.json';
+    try{this.directoryCache=JSON.parse(fs.readTextSync(context.filesDir+'/scan-directories.json')) as Record<string,ScanDirectory>;}catch(e){}
     try{this.shortCache=JSON.parse(fs.readTextSync(context.filesDir+'/scan-short-cache.json')) as Record<string,string>;}catch(e){}
     try{
       const roots=JSON.parse(fs.readTextSync(context.filesDir+'/scan-roots.json')) as string[];
       if(Array.isArray(roots))this.scanRoots=roots.filter((uri:string)=>typeof uri==='string'&&uri.startsWith('file://'));
     }catch(e){}
-    this.counts=JSON.parse(core.room(JSON.stringify({type:'openHistory',path:context.filesDir+'/plays.json'}))) as Record<string,number>;
+    this.counts=JSON.parse(core.room(JSON.stringify({type:'openHistory',name:deviceName,path:context.filesDir+'/plays.json'}))) as Record<string,number>;
     if(fs.accessSync(this.manifest)){
       try{this.songs=(JSON.parse(fs.readTextSync(this.manifest)) as Song[]).filter((song:Song)=>
-        !['demo','demo-moon','demo-forest'].includes(song.id));}catch(e){}
+        Boolean(song.sourceUri) || !['demo','demo-moon','demo-forest'].includes(song.id));}catch(e){}
     }
     const previous=new Set<string>();
     for(const song of this.songs){
@@ -192,22 +205,21 @@ export class LocalLibrary {
   }
   scanning:boolean=false;
   scanStatus:string='';
-  paused:boolean=false;
-  private gate?:Promise<void>;
-  private resume?:()=>void;
-  pauseImport(pause:boolean):void {
-    if(!this.scanning||pause===this.paused)return;
-    this.paused=pause;
-    if(pause)this.gate=new Promise<void>(resolve=>{this.resume=resolve;});
-    else {this.resume?.();this.gate=undefined;this.resume=undefined;}
-    this.changed();
+  private scanGeneration:number=0;
+  stopScan():void {
+    if(!this.scanning)return;
+    this.scanGeneration++;
+    this.scanning=false;this.scanStatus='已终止扫描';
+    this.scanDone=0;this.scanTotal=0;this.scanTotalKnown=false;this.scanFound=0;this.changed();
   }
-  private async waitForImport():Promise<void>{while(this.gate)await this.gate;}
+  private checkScan(run:number):void {
+    if(run!==this.scanGeneration)throw new Error('已终止扫描');
+  }
   async detailBytes(id:string,kind:string,offset:number,length:number):Promise<string>{
     const song=this.songs.find((s:Song)=>s.id===id);
-    if((kind==='thumbnail'||kind==='artwork') && song)return this.listThumbnail(song,kind==='artwork'?640:128);
+    if((kind==='thumbnail'||kind==='artwork'||kind==='systemArtwork') && song)return this.listThumbnail(song,kind==='artwork'?640:kind==='systemArtwork'?320:128);
     const name=kind==='audio'?song?.id:kind==='lyrics'?song?.lyricsFile:kind==='cover'?song?.coverFile:undefined;
-    if(!name||!/^[-a-f0-9]{36}(\.lrc|\.art)?$/i.test(name)||!Number.isSafeInteger(offset)||offset<0||
+    if(!name||!/^([-a-f0-9]{36}(\.lrc|\.art)?|received-[a-z0-9_-]+)$/i.test(name)||!Number.isSafeInteger(offset)||offset<0||
       !Number.isSafeInteger(length)||length<1||length>512*1024)return '';
     const file=await fs.open(this.context.filesDir+'/'+name,fs.OpenMode.READ_ONLY);
     try{
@@ -251,35 +263,62 @@ export class LocalLibrary {
     const folders=await new picker.DocumentViewPicker(this.context).select(opts);
     return folders[0]??'';
   }
-  private async directoriesForScan(rescan:boolean):Promise<string[]>{
+  private async directoriesForScan(rescan:boolean,run:number):Promise<string[]>{
     this.rootWarning='';
     if(rescan&&this.scanRoots.length){
       const available:string[]=[];let unavailable=0;
       for(const uri of this.scanRoots){
+        this.checkScan(run);
         try{
           const policies:fileShare.PolicyInfo[]=[{uri:uri,operationMode:fileShare.OperationMode.READ_MODE}];
           if(!(await fileShare.checkPersistentPermission(policies))[0]){unavailable++;continue;}
           await fileShare.activatePermission(policies);available.push(uri);
         }catch(e){unavailable++;}
       }
+      this.checkScan(run);
       if(unavailable)this.rootWarning=unavailable+' 个目录授权已失效，请重新选择文件夹';
       if(!available.length)this.scanStatus=this.rootWarning||'请重新选择音乐文件夹。';
       return available.filter((uri:string)=>!available.some((parent:string)=>parent!==uri&&LocalLibrary.folderKey(uri).startsWith(LocalLibrary.folderKey(parent)+'/')));
     }
     if(rescan){this.scanStatus='请先选择音乐文件夹，之后可点击开始扫描复扫。';this.changed();}
     const uri=await this.chooseDirectory();
+    this.checkScan(run);
     if(!uri){this.scanStatus='已取消选择文件夹';return [];}
     try{
       await fileShare.persistPermission([{uri:uri,operationMode:fileShare.OperationMode.READ_MODE}]);
+      this.checkScan(run);
       const roots=Array.from(new Set(this.scanRoots.concat([uri])));
       const target=this.context.filesDir+'/scan-roots.json',tmp=target+'.tmp';
       const file=fs.openSync(tmp,fs.OpenMode.CREATE|fs.OpenMode.WRITE_ONLY|fs.OpenMode.TRUNC);
       try{fs.writeSync(file.fd,JSON.stringify(roots));}finally{fs.closeSync(file);}
       fs.renameSync(tmp,target);this.scanRoots=roots;
-    }catch(e){this.rootWarning='本次目录授权未能保存，下次扫描需重新选择文件夹';}
+    }catch(e){this.checkScan(run);this.rootWarning='本次目录授权未能保存，下次扫描需重新选择文件夹';}
     return [uri];
   }
-  private async readFile(uri:string,folder:string,skipShort:boolean,existing?:Song):Promise<Song|undefined>{
+  private async copyScanFile(uri:string,path:string,run:number):Promise<void>{
+    this.checkScan(run);
+    const source=await fs.open(uri,fs.OpenMode.READ_ONLY);
+    try{
+      this.checkScan(run);
+      const target=fs.openSync(path,fs.OpenMode.CREATE|fs.OpenMode.WRITE_ONLY|fs.OpenMode.TRUNC);
+      try{
+        const buffer=new ArrayBuffer(512*1024);
+        while(true){
+          this.checkScan(run);
+          const count=await fs.read(source.fd,buffer);
+          if(!count)break;
+          let offset=0;
+          while(offset<count){
+            this.checkScan(run);
+            const written=await fs.write(target.fd,offset===0?buffer:buffer.slice(offset,count),{length:count-offset});
+            if(written<=0)throw new Error('无法复制音频');
+            offset+=written;
+          }
+        }
+      }finally{fs.closeSync(target);}
+    }finally{fs.closeSync(source);}
+  }
+  private async readFile(uri:string,folder:string,skipShort:boolean,run:number,created:string[],replacements:Map<string,string>,existing?:Song):Promise<Song|undefined>{
     let name='本机音乐';
     try{name=new fileUri.FileUri(uri).name||name;}catch(e){}
     const id=existing?.id??util.generateRandomUUID(),target=this.context.filesDir+'/'+id;
@@ -288,17 +327,25 @@ export class LocalLibrary {
       addedAt:existing?existing.addedAt:Date.now(),fileName:name,playCount:existing?.playCount,hidden:existing?.hidden};
     const ms=await this.readTags(song,uri);
     if(ScanFilter.skipsAudio(skipShort,ms,song.album??''))return undefined;
-    const copy=await fs.open(uri,fs.OpenMode.READ_ONLY);
-    try{await fs.copyFile(copy.fd,path);this.facts(song,path,name);if(existing)fs.renameSync(path,target);}
-    catch(e){if(fs.accessSync(path))fs.unlinkSync(path);throw new Error((e as Error).message);}
-    finally{await fs.close(copy);}
+    this.checkScan(run);
+    created.push(path);
+    try{
+      await this.copyScanFile(uri,path,run);
+      this.checkScan(run);this.facts(song,path,name);
+    }catch(e){
+      try{fs.unlinkSync(path);}catch(ignored){}
+      throw new Error((e as Error).message);
+    }
+    if(existing)replacements.set(path,target);
     return song;
   }
   async pick(folderMode:boolean=false,skipShort:boolean=false,blocked:string[]=[],blockedFormats:string[]=[],rescan:boolean=false):Promise<void>{
     if(this.scanning)return;
+    const run=++this.scanGeneration;
     this.scanRead=0;this.scanUnchanged=0;
-    this.scanTotal=0;this.scanDone=0;this.scanFound=0;this.scanning=true;this.scanStatus='';this.changed();
+    this.scanTotal=0;this.scanTotalKnown=false;this.scanDone=0;this.scanFound=0;this.scanning=true;this.scanStatus='';this.changed();
     await this.legacyFill?.catch(()=>{});
+    if(run!==this.scanGeneration)return;
     let failed=0,shortFiles=0,excludedFolders=0,excludedFormats=0;
     const scanFilter=new ScanFilter(blockedFormats);
     const history=new Set<string>();
@@ -306,31 +353,37 @@ export class LocalLibrary {
     const candidates:ScanFile[]=[],sidecars=new Map<string,string>();
     const sideStamps=new Map<string,string>(),completeDirs=new Set<string>();
     const refresh=new Map<string,Song>(),byUri=new Map<string,Song>();
+    const directoryCache=new Map<string,ScanDirectory>();
+    for(const key of Object.keys(this.directoryCache))directoryCache.set(key,this.directoryCache[key]);
+    const shortCache=new Map<string,string>();
+    for(const key of Object.keys(this.shortCache))shortCache.set(key,this.shortCache[key]);
+    const listed=new Map<string,Set<string>>();
     const coverFiles=new Map<string,Promise<string>>();
     const created:string[]=[];
+    const replacements=new Map<string,string>();
     for(const song of this.songs){
-      if(song.sourceUri)byUri.set(song.sourceUri,song);
+      if(song.sourceUri)byUri.set(LocalLibrary.folderKey(song.sourceUri),song);
       if(song.coverUri&&song.coverFile&&song.coverStamp&&fs.accessSync(this.context.filesDir+'/'+song.coverFile))coverFiles.set(song.coverUri+'|'+song.coverStamp,Promise.resolve(song.coverFile));
     }
     const known=new Set<string>();
     const copySide=async(uri:string,suffix:string):Promise<string>=>{
       const name=util.generateRandomUUID()+suffix;
-      try{
-        const file=await fs.open(uri,fs.OpenMode.READ_ONLY);
-        try{await fs.copyFile(file.fd,this.context.filesDir+'/'+name);}finally{await fs.close(file);}
-        created.push(name);return name;
-      }catch(e){try{fs.unlinkSync(this.context.filesDir+'/'+name);}catch(ignored){}return '';}
+      const path=this.context.filesDir+'/'+name;
+      created.push(path);
+      try{await this.copyScanFile(uri,path,run);return name;}
+      catch(e){try{fs.unlinkSync(path);}catch(ignored){}return '';}
     };
     try{
       if(folderMode){
-        const roots=await this.directoriesForScan(rescan);
+        const roots=await this.directoriesForScan(rescan,run);
+        this.checkScan(run);
         if(!roots.length)return;
         this.scanStatus='正在扫描文件夹…';this.changed();
         for(const selected of roots){
         const root=new fileUri.FileUri(selected);
         const pending:string[]=[selected];
         while(pending.length){
-          await this.waitForImport();
+          this.checkScan(run);
           const dir=pending.pop() as string;
           const key=LocalLibrary.folderKey(dir);
           if(blocked.some((parent:string)=>key===parent||key.startsWith(parent+'/'))){excludedFolders++;continue;}
@@ -338,17 +391,25 @@ export class LocalLibrary {
           try{
             opened=fs.openSync(dir,fs.OpenMode.READ_ONLY);
             const directory=opened.path;
-            const names=await fs.listFile(directory);
+            const before=fs.statSync(opened.fd);
+            // Only reuse names with a stable inode and high resolution directory change times.
+            const marker=before.ino&&before.mtimeNs&&before.ctimeNs?LocalLibrary.stamp('',before):'';
+            const cached=directoryCache.get(key);
+            const names:string[]=marker&&cached&&cached.stamp===marker?cached.names:await fs.listFile(directory);
+            const members=new Set<string>();
+            this.checkScan(run);
             let complete=true;
             history.add(key);
             for(let start=0;start<names.length;start+=16){
-              await this.waitForImport();
+              this.checkScan(run);
               const group=names.slice(start,start+16);
               const stats=await Promise.all(group.map((name:string)=>fs.lstat(directory+'/'+name).catch(()=>undefined)));
+              this.checkScan(run);
               for(let i=0;i<group.length;i++){
               const name=group[i],stat=stats[i];
               if(!stat){failed++;complete=false;continue;}
               const uri=dir.replace(/\/$/,'')+'/'+encodeURIComponent(name);
+              members.add(LocalLibrary.folderKey(uri));
               try{
                 if(stat.isDirectory()){pending.push(uri);continue;}
                 const key=dir+'/'+name.replace(/\.[^.]+$/,'').toLowerCase();
@@ -365,7 +426,11 @@ export class LocalLibrary {
               }catch(e){failed++;complete=false;}
               }
             }
-            if(complete)completeDirs.add(dir);
+            const after=LocalLibrary.stamp('',fs.statSync(opened.fd));
+            if(complete&&(!marker||marker===after)){
+              completeDirs.add(dir);listed.set(key,members);
+              if(marker)directoryCache.set(key,{stamp:marker,names:names});
+            }else directoryCache.delete(key);
           }catch(e){failed++;}finally{if(opened)fs.closeSync(opened);}
         }
         }
@@ -377,26 +442,30 @@ export class LocalLibrary {
           candidates.push({uri:uri,folder:folder,stem:''});
         }
       }
-      this.scanTotal=candidates.length;this.changed();
+      this.checkScan(run);
+      this.scanTotal=candidates.length;this.scanTotalKnown=true;this.changed();
       let cursor=0;
       const added=new Map<number,Song>();
       const worker=async():Promise<void>=>{
         while(cursor<candidates.length){
-          await this.waitForImport();
+          if(cursor%32===0)await new Promise<void>(resolve=>{setTimeout(resolve,0);});
+          if(run!==this.scanGeneration)return;
           if(cursor>=candidates.length)break;
           const index=cursor++,item=candidates[index];
           try{
-            if(known.has(item.uri))continue;
-            known.add(item.uri);
-            const prior=byUri.get(item.uri);
+            const uriKey=LocalLibrary.folderKey(item.uri);
+            if(known.has(uriKey))continue;
+            known.add(uriKey);
+            const prior=byUri.get(uriKey);
             let song=prior;
             const unchanged=!!(prior&&item.stamp&&item.stamp===prior.scanStamp&&!LocalLibrary.needsFacts(prior)&&fs.accessSync(this.context.filesDir+'/'+prior.id));
-            if(!prior&&folderMode&&skipShort&&item.stamp&&this.shortCache[item.uri]===item.stamp){shortFiles++;this.scanUnchanged++;continue;}
+            if(!prior&&folderMode&&skipShort&&item.stamp&&shortCache.get(item.uri)===item.stamp){shortFiles++;this.scanUnchanged++;continue;}
             if(!unchanged){
               this.scanRead++;
-              song=await this.readFile(item.uri,item.folder,!prior&&folderMode&&skipShort,prior);
-              if(!song){shortFiles++;if(item.stamp)this.shortCache[item.uri]=item.stamp;continue;}
-              this.shortCache[item.uri]='';song.scanStamp=item.stamp;
+              song=await this.readFile(item.uri,item.folder,!prior&&folderMode&&skipShort,run,created,replacements,prior);
+              this.checkScan(run);
+              if(!song){shortFiles++;if(item.stamp)shortCache.set(item.uri,item.stamp);continue;}
+              shortCache.delete(item.uri);song.scanStamp=item.stamp;
               if(prior){
                 song.lyricsFile=prior.lyricsFile;song.lyricUri=prior.lyricUri;song.lyricStamp=prior.lyricStamp;
                 song.coverFile=prior.coverFile;song.coverUri=prior.coverUri;song.coverStamp=prior.coverStamp;
@@ -418,7 +487,7 @@ export class LocalLibrary {
             const lyric=sidecars.get(item.stem+'.lrc');
             const lyricStamp=lyric?sideStamps.get(lyric):undefined;
             if(lyric&&(!lyricStamp||lyricStamp!==song.lyricStamp||lyric!==song.lyricUri||!song.lyricsFile||!fs.accessSync(this.context.filesDir+'/'+song.lyricsFile))){
-              const name=await copySide(lyric,'.lrc');
+              const name=await copySide(lyric,'.lrc');this.checkScan(run);
               if(name){update.hasLyrics=true;update.lyricsFile=name;update.lyricUri=lyric;update.lyricStamp=lyricStamp;refresh.set(song.id,update);}else failed++;
             }else if(!lyric&&complete&&song.lyricsFile){
               if(update.embeddedHasLyrics===undefined){this.scanRead++;await this.readTags(update,this.context.filesDir+'/'+song.id);}
@@ -437,30 +506,62 @@ export class LocalLibrary {
               const cacheKey=art+'|'+(artStamp??'');
               let copying=coverFiles.get(cacheKey);
               if(!copying){copying=copySide(art,'.art');coverFiles.set(cacheKey,copying);}
-              const name=await copying;
+              const name=await copying;this.checkScan(run);
               if(name){update.coverUri=art;update.coverFile=name;update.coverStamp=artStamp;refresh.set(song.id,update);}else failed++;
             }else if(!art&&complete&&song.coverFile){
               update.coverUri=undefined;update.coverFile=undefined;update.coverStamp=undefined;refresh.set(song.id,update);
             }
-          }catch(e){failed++;}finally{this.scanDone++;this.reportScan();}
+          }catch(e){failed++;}finally{if(run===this.scanGeneration){this.scanDone++;this.reportScan();}}
         }
       };
       await Promise.all([worker(),worker()]);
-      if(batch.length||refresh.size){
+      this.checkScan(run);
+      const missing=(source:string):boolean=>{
+        let child=LocalLibrary.folderKey(source);
+        while(child.lastIndexOf('/')>7){
+          const parent=child.substring(0,child.lastIndexOf('/'));
+          const entries=listed.get(parent);
+          if(entries&&!entries.has(child))return true;
+          child=parent;
+        }
+        return false;
+      };
+      const removed=new Set<string>();
+      if(folderMode){
+        for(const song of this.songs)if(song.scanStamp!==undefined&&song.sourceUri&&missing(song.sourceUri))removed.add(song.id);
+        for(const key of Array.from(shortCache.keys()))if(missing(key))shortCache.delete(key);
+        for(const key of Array.from(directoryCache.keys()))if(missing(key))directoryCache.delete(key);
+      }
+      if(batch.length||refresh.size||removed.size){
         const ordered:Song[]=[];
         for(let i=0;i<candidates.length;i++){const song=added.get(i);if(song)ordered.push(song);}
-        const updated=this.songs.concat(ordered).map((song:Song):Song=>refresh.get(song.id)??song);
+        const updated=this.songs.filter((song:Song)=>!removed.has(song.id)).concat(ordered).map((song:Song):Song=>refresh.get(song.id)??song);
         const tmp=this.manifest+'.tmp';
         const file=fs.openSync(tmp,fs.OpenMode.CREATE|fs.OpenMode.WRITE_ONLY|fs.OpenMode.TRUNC);
         try{fs.writeSync(file.fd,JSON.stringify(updated));}finally{fs.closeSync(file);}
+        replacements.forEach((target:string,staged:string)=>fs.renameSync(staged,target));
         fs.renameSync(tmp,this.manifest);
         for(const song of this.songs){
           const next=refresh.get(song.id);
           if(next&&song.lyricsFile&&next.lyricsFile!==song.lyricsFile){try{fs.unlinkSync(this.context.filesDir+'/'+song.lyricsFile);}catch(e){}}
           if(next&&song.coverFile&&!updated.some((s:Song)=>s.coverFile===song.coverFile)){try{fs.unlinkSync(this.context.filesDir+'/'+song.coverFile);}catch(e){}}
         }
-        this.songs=updated;this.revision++;
+        const current=this.songs[this.index]?.id;
+        if(current&&removed.has(current))this.stop().catch(()=>{});
+        this.songs=updated;
+        this.index=Math.max(0,this.songs.findIndex((song:Song)=>song.id===current));
+        this.order=this.order.filter((id:string)=>!removed.has(id));this.playNext=this.playNext.filter((id:string)=>!removed.has(id));
+        this.revision++;
       }
+      this.directoryCache={};this.shortCache={};
+      directoryCache.forEach((value:ScanDirectory,key:string)=>{this.directoryCache[key]=value;});
+      shortCache.forEach((value:string,key:string)=>{this.shortCache[key]=value;});
+      if(folderMode)try{
+        const path=this.context.filesDir+'/scan-directories.json',tmp=path+'.tmp';
+        const file=fs.openSync(tmp,fs.OpenMode.CREATE|fs.OpenMode.WRITE_ONLY|fs.OpenMode.TRUNC);
+        try{fs.writeSync(file.fd,JSON.stringify(this.directoryCache));}finally{fs.closeSync(file);}
+        fs.renameSync(tmp,path);
+      }catch(e){}
       try{
         const cachePath=this.context.filesDir+'/scan-short-cache.json',cacheTemp=cachePath+'.tmp';
         const file=fs.openSync(cacheTemp,fs.OpenMode.CREATE|fs.OpenMode.WRITE_ONLY|fs.OpenMode.TRUNC);
@@ -468,15 +569,18 @@ export class LocalLibrary {
         fs.renameSync(cacheTemp,cachePath);
       }catch(e){}
       this.scanStatus='完成，新增 '+batch.length+' 首'+(shortFiles?'，跳过短音频 '+shortFiles+' 首':'')+(excludedFormats?'，跳过屏蔽格式 '+excludedFormats+' 首':'')+(excludedFolders?'，跳过屏蔽目录 '+excludedFolders+' 个':'')+(failed?'，无法读取 '+failed+' 项':'');
+      if(removed.size)this.scanStatus+='，移除失效条目 '+removed.size+' 首';
       if(folderMode)this.scanStatus+='；枚举 '+this.scanFound+' 首，读取 '+this.scanRead+' 首，未变化 '+this.scanUnchanged+' 首';
       if(folderMode&&this.rootWarning)this.scanStatus+='；'+this.rootWarning;
     }catch(e){
-      for(const name of created){try{fs.unlinkSync(this.context.filesDir+'/'+name);}catch(ignored){}}
-      for(const song of batch){try{fs.unlinkSync(this.context.filesDir+'/'+song.id);}catch(ignored){}}
+      for(const path of created){try{fs.unlinkSync(path);}catch(ignored){}}
+      if(run!==this.scanGeneration)return;
       throw new Error((e as Error).message);
     }finally{
-      if(history.size){this.scanHistory=Array.from(history);this.historyRevision++;}
-      this.pauseImport(false);this.scanning=false;this.changed();
+      if(run===this.scanGeneration){
+        if(history.size){this.scanHistory=Array.from(history);this.historyRevision++;}
+        this.scanning=false;this.changed();
+      }
     }
   }
   private playSession:string='';
@@ -502,7 +606,13 @@ export class LocalLibrary {
       const p=await media.createAVPlayer();if(gen!==this.generation){await p.release();return;}this.player=p;
       p.on('error',()=>{if(this.player===p){this.error='这首音乐无法播放';this.stop();this.changed();}});
       this.playSession=util.generateRandomUUID();this.playbackEvent('begin');
-      this.statisticsSeeking=false;p.on('seekDone',()=>{if(this.player===p){this.statisticsSeeking=false;this.playbackEvent('seeked');}});
+      this.statisticsSeeking=false;
+      p.on('seekDone',()=>{
+        if(this.player!==p)return;
+        this.statisticsSeeking=false;
+        this.playbackEvent('seeked');
+        this.changed();
+      });
       p.on('stateChange',async state=>{
         if(this.player!==p)return;
         try{
@@ -519,6 +629,15 @@ export class LocalLibrary {
     this.changed();
   }
   async toggle():Promise<void>{const p=this.player;if(!p)await this.play(this.index);else if(p.state==='playing')await p.pause();else if(p.state==='paused'||p.state==='prepared')await p.play();this.changed();}
-  seek(seconds:number){if(this.player && (this.player.state==='playing'||this.player.state==='paused')){this.playbackEvent('seek',seconds);this.statisticsSeeking=true;this.player.seek(Math.round(seconds*1000),media.SeekMode.SEEK_CLOSEST);}}
+  seek(seconds:number):void {
+    const player=this.player;
+    if(!player || !Number.isFinite(seconds) || player.duration<=0)return;
+    if(player.state!=='playing' && player.state!=='paused' && player.state!=='prepared')return;
+    const targetMs=Math.max(0,Math.min(player.duration,Math.round(seconds*1000)));
+    // AVPlayer's explicit frame selection modes are for video.
+    player.seek(targetMs);
+    this.statisticsSeeking=true;
+    this.playbackEvent('seek',targetMs/1000);
+  }
 }
 

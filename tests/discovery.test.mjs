@@ -36,8 +36,12 @@ test('nearby search lists separate phones of the same model and only invites liv
     assert.equal(phones.length, 2);
     assert.equal(phones[0].name, data.model);
     assert.equal(await scan.invite(data.id), true);
-    assert.deepEqual(sent.at(-1), {message:{service:'lume-invite/1', id:data.id, name:'测试空间', port:47000},
+    const grant=sent.at(-1).message.inviteToken;assert.match(grant,/^[0-9a-f]{32}$/);
+    assert.deepEqual(sent.at(-1), {message:{service:'lume-invite/1', id:data.id, name:'测试空间', port:47000,inviteToken:grant,inviteProof:''},
       port:46324,address:peer.address});
+    assert.equal(scan.redeem(grant,data.id,'192.0.2.77'),false);
+    assert.equal(scan.redeem(grant,data.id,peer.address),true);
+    assert.equal(scan.redeem(grant,data.id,peer.address),false);
     receive({service:'lume-room/1',name:'手机空间',port:46321,guest:true},{address:'192.168.1.15',port:46322});
     const room=(await scan.search()).find(p=>p.roomPort);
     assert.equal(room.name,'手机空间');

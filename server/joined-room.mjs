@@ -7,8 +7,8 @@ const error=(message,status=400)=>Object.assign(new Error(message),{status});
 
 /** Keeps the phone authoritative while the local player remains on its own origin. */
 export class JoinedRoom {
-  constructor({changed=()=>{},fetchImpl=fetch,pollInterval=250,resolveLocal=async()=>null}={}) {
-    this.resolveLocal=resolveLocal;this.localTrack=null;this.localKey='';
+  constructor({deviceName=()=>"澄音 Windows",changed=()=>{},fetchImpl=fetch,pollInterval=250,resolveLocal=async()=>null}={}) {
+    this.deviceName=deviceName;this.resolveLocal=resolveLocal;this.localTrack=null;this.localKey='';
     this.changed=changed;this.fetch=fetchImpl;this.pollInterval=pollInterval;
     this.connection=null;this.packet=null;this.catalog=[];this.generation=0;this.revision=0;
     this.id='native-'+randomUUID();this.cookie='';this.timer=null;this.polling=null;
@@ -67,28 +67,33 @@ export class JoinedRoom {
     try{return await (await this.request(route,body,{signal:deadline.signal})).json();}
     finally{clearTimeout(timer);session?.removeEventListener('abort',relayAbort);}
   }
-  async join(origin,name='手机播放空间') {
+  async join(origin,name='手机播放空间',invitation=null) {
     const url=new URL(origin);
     if(url.protocol!=='http:'||url.username||url.password||url.pathname!=='/'||url.search||url.hash)throw error('无效的播放空间地址');
     await this.leave();
     const generation=++this.generation;
-    this.origin=url.origin;this.cookie='';this.controller=new AbortController();this.packet=null;this.catalog=[];
+    this.clockSample=null;this.origin=url.origin;this.cookie='';this.controller=new AbortController();this.packet=null;this.catalog=[];
     this.connection={status:'joining',name,url:url.origin,error:''};this.changed();
     try {
       const info=await this.json('/api/info');
       if(info.service!=='lume-room/1')throw error('此地址不是澄音播放空间');
       this.connection.name=info.roomName||name;
-      const ticket=await this.json('/api/join/request',{platform:'Windows',model:'澄音 Windows'});
-      if(typeof ticket.id!=='string'||typeof ticket.secret!=='string')throw error('手机未返回有效的加入请求');
-      this.connection.status='waiting';this.changed();
-      const until=Date.now()+60000;
-      for(;;){
-        await delay(700,undefined,{signal:this.controller.signal});
-        if(generation!==this.generation)throw error('加入已取消');
-        const result=await this.json('/api/join/status',ticket);
-        if(result.decision==='allow')break;
-        if(result.decision==='deny')throw error('手机拒绝了加入请求');
-        if(Date.now()>=until)throw error('等待手机确认超时，请重新加入');
+      if(invitation){
+        await this.json('/api/join/invite',invitation);
+        if(!this.cookie)throw error('邀请未返回有效会话');
+      }else{
+        const ticket=await this.json('/api/join/request',{platform:'Windows',model:this.deviceName()});
+        if(typeof ticket.id!=='string'||typeof ticket.secret!=='string')throw error('手机未返回有效的加入请求');
+        this.connection.status='waiting';this.changed();
+        const until=Date.now()+60000;
+        for(;;){
+          await delay(700,undefined,{signal:this.controller.signal});
+          if(generation!==this.generation)throw error('加入已取消');
+          const result=await this.json('/api/join/status',ticket);
+          if(result.decision==='allow')break;
+          if(result.decision==='deny')throw error('手机拒绝了加入请求');
+          if(Date.now()>=until)throw error('等待手机确认超时，请重新加入');
+        }
       }
       await this.poll(generation);
       if(generation!==this.generation||!this.packet)throw error('手机未返回播放状态');
@@ -113,14 +118,22 @@ export class JoinedRoom {
     if(this.polling){await this.polling;return;}
     const revision=this.revision;
     const task=(async()=>{
-      const data=await this.json('/api/receiver',{id:this.id,platform:'Windows',model:'澄音 Windows',savedChannel:'stereo',libraryVersion:this.packet?.libraryVersion??-1});
+      const sent=Date.now();
+      const data=await this.json('/api/receiver',{id:this.id,platform:'Windows',model:this.deviceName(),savedChannel:'stereo',libraryVersion:this.packet?.libraryVersion??-1});
       if(generation!==this.generation||revision!==this.revision)return;
       if(!Array.isArray(data.outputs)||typeof data.trackId!=='string')throw error('手机返回的播放状态不完整');
       if(Array.isArray(data.catalog))this.catalog=data.catalog.filter(track=>typeof track.id==='string'&&typeof track.title==='string');
-      this.packet={...data,receivedAt:Date.now()};
+      const receivedAt=Date.now(),rtt=receivedAt-sent;
+      let sampledAt=(sent+receivedAt)/2;
+      if(Number.isFinite(data.serverTime)){
+        if(!this.clockSample||receivedAt-this.clockSample.since>10000||rtt<=this.clockSample.rtt)
+          this.clockSample={offset:data.serverTime-sampledAt,rtt,since:receivedAt};
+        sampledAt=data.serverTime-this.clockSample.offset;
+      }
+      this.packet={...data,receivedAt,sampledAt};
       this.refreshLocal(data,generation);
       this.refreshDetails(data,generation);
-      this.connection={...this.connection,status:'joined',error:data.roomError||''};this.changed();
+      this.connection={...this.connection,status:'joined',hostAddress:data.hostAddress,error:data.roomError||''};this.changed();
     })();
     this.polling=task;
     try{await task;}finally{if(this.polling===task)this.polling=null;}
@@ -133,7 +146,7 @@ export class JoinedRoom {
     this.loadingDetails=key;
     void this.json('/api/track-details/'+encodeURIComponent(trackId)+'/'+detailToken).then(data=>{
       if(this.detailKey!==key || this.generation!==generation)return;
-      const match=typeof data.cover==='string' && data.cover.length<=3000000 && /^data:image\/(webp|png|jpeg);base64,([A-Za-z0-9+/=]+)$/.exec(data.cover);
+      const match=typeof data.cover==='string' && data.cover.length<=3000000 && /^data:image\/(webp|png|jpeg|gif|bmp);base64,([A-Za-z0-9+/=]+)$/.exec(data.cover);
       this.details={trackId,key:randomUUID(),lyrics:typeof data.lyrics==='string'?data.lyrics:'',image:match?Buffer.from(match[2],'base64'):null,mime:match?'image/'+match[1]:''};
       this.changed();
     }).catch(()=>{}).finally(()=>{if(this.loadingDetails===key)this.loadingDetails=null;});
@@ -160,8 +173,38 @@ export class JoinedRoom {
     if(command.type==='play'&&command.trackId&&!this.catalog.some(track=>track.id===command.trackId))throw error('歌曲已不在手机曲库中');
     if(command.type==='seek'&&!Number.isFinite(command.position))throw error('无效的播放位置');
     if(command.type==='shuffle'&&typeof command.value!=='boolean')throw error('无效的播放模式');
+    const generation=this.generation;
     ++this.revision;
-    await this.json('/api/action',command);
+    if(command.type==='output'){
+      // Keep at most one outstanding request and one latest patch per device.
+      // A slow wireless link must not replay every intermediate slider position.
+      let batch=this.outputBatch;
+      if(!batch || batch.generation!==generation){
+        batch={generation,pending:new Map(),done:null};
+        this.outputBatch=batch;
+      }
+      batch.pending.set(command.id,{...batch.pending.get(command.id),...command.patch});
+      if(!batch.done){
+        const flush=async()=>{
+          while(batch.pending.size && generation===this.generation){
+            const [id,patch]=batch.pending.entries().next().value;
+            batch.pending.delete(id);
+            await this.json('/api/action',{type:'output',id,patch});
+          }
+          if(generation!==this.generation)return;
+          if(this.polling)await this.polling.catch(()=>{});
+          if(generation===this.generation)await this.poll(generation);
+        };
+        const drain=async()=>{
+          try{
+            do{await flush();}while(batch.pending.size && generation===this.generation);
+          }finally{if(this.outputBatch===batch)this.outputBatch=null;}
+        };
+        batch.done=drain();
+      }
+      await batch.done;
+      return;
+    }else await this.json('/api/action',command);
     if(this.polling)await this.polling.catch(()=>{});
     await this.poll();
   }
@@ -173,7 +216,7 @@ export class JoinedRoom {
     const packet=this.packet,now=packet.receivedAt;
     const tracks=this.catalog.map(track=>({...track,artist:track.artist||'手机音乐',album:track.album||'',
       duration:track.id===packet.trackId?number(packet.duration):number(track.duration),format:track.format||'音频',
-      artwork:'/covers/1.svg',source:'phone',favorite:false}));
+      artwork:/^[a-f0-9]{32}$/.test(track.coverRevision)?'/api/room/thumbnail/'+this.generation+'/'+track.coverRevision+'/'+encodeURIComponent(track.id):'/covers/1.svg',source:'phone',favorite:false}));
     if(packet.trackId&&!tracks.some(track=>track.id===packet.trackId))tracks.push({id:packet.trackId,title:packet.roomTrack||'手机音乐',artist:'',album:'',duration:number(packet.duration),format:'音频',artwork:'/covers/1.svg',source:'phone',favorite:false});
     const selected=tracks.find(track=>track.id===packet.trackId);
     if(selected && this.details?.trackId===selected.id){
@@ -185,7 +228,7 @@ export class JoinedRoom {
       selected.localAudioKey=this.localTrack.id;
       selected.detailKey=(selected.detailKey||'')+'/local/'+this.localTrack.id;
       selected.hasLyrics=!!this.localTrack.hasLyrics||!!selected.hasLyrics;
-      if(this.localTrack.artwork)selected.artwork=this.localTrack.artwork;
+      if(selected.artwork==='/covers/1.svg'&&this.localTrack.artwork)selected.artwork=this.localTrack.artwork;
     }
     const outputs=(packet.outputs||[]).map(output=>({...output,lastSeen:now}));
     const self=outputs.find(output=>output.id===packet.selfId);
@@ -195,10 +238,27 @@ export class JoinedRoom {
     const position=number(packet.position);
     return {tracks,queue:tracks.map(track=>track.id),playlists:[],phoneLibraries:[],listeningDays:packet.listeningDays||globalThis.lumeListening.days(packet.playRecords||[]),playRecords:packet.playRecords,
       playback:{trackId:packet.trackId||null,playing:this.connection.status==='joined'&&!!packet.roomPlaying,
-        position:Math.max(0,position),updatedAt:now+Math.max(0,-position)*1000,
+        position:Math.max(0,position),updatedAt:(packet.sampledAt??now)+Math.max(0,-position)*1000,
         volume:1,muted:false,shuffle:!!packet.shuffle,repeat:'off'},
       devices:[...peers,...locals],room:{name:this.connection.name},pending:[],calibrating:false,
       guestRoom:this.info(),serverTime:Date.now()};
+  }
+  async thumbnail(generation,revision,id){
+    const valid=()=>this.active()&&generation===this.generation&&this.catalog.some(song=>song.id===id&&song.coverRevision===revision);
+    if(!/^[a-f0-9]{32}$/.test(revision)||!/^[A-Za-z0-9_-]+$/.test(id)||!valid())throw error('空间封面已变更',404);
+    const signal=this.controller.signal,until=Date.now()+30000;
+    while(valid()&&Date.now()<until){
+      const data=await this.json('/api/catalog-cover/'+revision+'/'+id);
+      if(!valid())break;
+      if(data.cover==='')return null;
+      if(typeof data.cover==='string'&&data.cover.length<=1500000){
+        const match=/^data:image\/(webp|png|jpeg|gif|bmp);base64,([A-Za-z0-9+/=]+)$/.exec(data.cover);
+        if(match)return {mime:'image/'+match[1],image:Buffer.from(match[2],'base64')};
+      }
+      if(!data.pending)break;
+      await delay(400,undefined,{signal});
+    }
+    throw error('无法读取空间封面',503);
   }
   async media(id,range) {
     if(!this.active()||id!==this.packet.trackId)throw error('手机已切换歌曲',404);

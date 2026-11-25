@@ -16,6 +16,9 @@
       },
       {
         "name": "ohos.permission.FILE_ACCESS_PERSIST"
+      },
+      {
+        "name": "ohos.permission.KEEP_BACKGROUND_RUNNING"
       }
     ],
     "abilities": [
@@ -37,7 +40,24 @@
         "startWindowIcon": "$media:lume",
         "startWindowBackground": "$color:launch",
         "icon": "$media:lume",
-        "label": "$string:app_name"
+        "label": "$string:app_name",
+        "backgroundModes": [
+          "audioPlayback"
+        ]
+      }
+    ],
+    "extensionAbilities": [
+      {
+        "name": "PlayerFormAbility",
+        "srcEntry": "./ets/widget/PlayerFormAbility.ets",
+        "type": "form",
+        "exported": true,
+        "metadata": [
+          {
+            "name": "ohos.extension.form",
+            "resource": "$profile:player_forms"
+          }
+        ]
       }
     ]
   }

@@ -35,7 +35,8 @@ function initLibrarySort() {
         (mode === 'addedDesc' ? index.get(b.id)-index.get(a.id) : index.get(a.id)-index.get(b.id)));
     }
     const compare = {
-      title: (a,b) => text(a.title,b.title), fileName: (a,b) => text(name(a),name(b)),
+      title: (a,b) => compareInitialLetters(a.title,b.title),
+      fileName: (a,b) => compareInitialLetters(name(a),name(b)),
       album, artist: (a,b) => text(a.artist,b.artist) || album(a,b),
       folder: (a,b) => text(a.folder,b.folder), count: (a,b) => count(b)-count(a),
       bytes: (a,b) => number(a.bytes,b.bytes), year: (a,b) => number(a.year,b.year),

@@ -60,12 +60,21 @@ async function libraryFixture(){
     [root+'/Album/intro.flac',{duration:13000,album:'真实专辑'}],[root+'/Album/commonIntro.flac',{duration:13000,album:'<unknown>'}],
     [root+'/Album/untagged.flac',{duration:13000}],[root+'/Album/excluded.MP3',{duration:13000,album:'真实专辑'}],[root+'/Recordings/memo.wav',{duration:13000}]]);
   const opened=[],copied=[],listed=[],activated=[],persisted=new Set(),storage=new Map(),copySources=new Map();let serial=0,pickerCount=0;
-  const versions=new Map(),statFailures=new Set();
+  const versions=new Map(),statFailures=new Set(),readPositions=new Map(),buffers=new WeakMap();
   const stats=p=>({isDirectory:()=>entries.has(p),isFile:()=>!entries.has(p),size:100,mtime:100,...versions.get(p)});
   const fs={OpenMode:{READ_ONLY:0,CREATE:1,WRITE_ONLY:2,TRUNC:4},accessSync:p=>storage.has(p),readTextSync:p=>{if(!storage.has(p))throw Error('missing');return storage.get(p);},
-    openSync:p=>{opened.push(p);return{fd:p,path:p};},open:async p=>{opened.push(p);return{fd:p,path:p};},
+    openSync:p=>{opened.push(p);return{fd:p,path:p};},open:async p=>{opened.push(p);readPositions.set(p,0);return{fd:p,path:p};},
     closeSync:()=>{},close:async()=>{},listFile:async p=>{listed.push(p);return entries.get(p)||[];},
-    lstat:async p=>{if(statFailures.has(p))throw Error('stat denied');return stats(p);},stat:async p=>stats(p),
+    lstat:async p=>{if(statFailures.has(p))throw Error('stat denied');return stats(p);},stat:async p=>stats(p),statSync:stats,
+    read:async(fd,buffer)=>{
+      if(readPositions.get(fd))return 0;
+      buffers.set(buffer,fd);readPositions.set(fd,100);return 100;
+    },
+    write:async(fd,buffer,{length})=>{
+      const from=buffers.get(buffer);assert(from);
+      copied.push(from);copySources.set(fd,from);storage.set(fd,'copy:'+from+':'+(versions.get(from)?.mtime??100));
+      return length;
+    },
     copyFile:async(from,to)=>{copied.push(from);copySources.set(to,from);storage.set(to,'copy:'+from+':'+(versions.get(from)?.mtime??100));},
     unlinkSync:p=>storage.delete(p),writeSync:(fd,text)=>storage.set(fd,text),renameSync:(from,to)=>{storage.set(to,storage.get(from));storage.delete(from);if(copySources.has(from)){copySources.set(to,copySources.get(from));copySources.delete(from);}}};
   class FileUri {constructor(uri){this.uri=uri;}get name(){return decodeURIComponent(this.uri.split('/').pop());}getFullDirectoryUri(){return this.uri.substring(0,this.uri.lastIndexOf('/'));}}
@@ -73,11 +82,21 @@ async function libraryFixture(){
     AudioSelectOptions:class{},AudioViewPicker:class{async select(){return[root+'/filtered.MP3',root+'/short.WaV'];}}};
   const fileShare={OperationMode:{READ_MODE:1},persistPermission:async policies=>policies.forEach(p=>persisted.add(p.uri)),checkPersistentPermission:async policies=>policies.map(p=>persisted.has(p.uri)),activatePermission:async policies=>policies.forEach(p=>activated.push(p.uri))};
   const media={createAVMetadataExtractor:async()=>({async fetchMetadata(){const uri=copySources.get(this.fdSrc.fd)||this.fdSrc.fd;return metadata.get(uri)||{duration:120000};},async release(){}})};
-  const core={room:raw=>{const request=JSON.parse(raw);if(request.type!=='audioFacts')return '{}';let uri=request.path.replace('/proc/self/fd/','');uri=copySources.get(uri)||uri;return JSON.stringify({bytes:100,factsVersion:1,quality:'lossless',hasLyrics:false,...(uri.endsWith('/commonIntro.flac')?{album:'公共解析器的真实专辑'}:{})});}};
+  const core={room:raw=>{const request=JSON.parse(raw);if(request.type!=='audioFacts')return '{}';let uri=request.path.replace('/proc/self/fd/','');uri=copySources.get(uri)||uri;return JSON.stringify({bytes:100,factsVersion:3,quality:'lossless',hasLyrics:false,...(uri.endsWith('/commonIntro.flac')?{album:'公共解析器的真实专辑'}:{})});}};
   const {LocalLibrary}=loadEts(await read(etsRoot+'LocalLibrary.ets'),{fs,fileUri:{FileUri},picker,ScanFilter,fileShare,media,core,util:{generateRandomUUID:()=>`id-${++serial}`},setTimeout});
   const create=()=>new LocalLibrary({filesDir:'/private'},()=>{});
   return{library:create(),create,root,blocked,copied,opened,listed,entries,metadata,persisted,activated,storage,versions,statFailures,pickerCount:()=>pickerCount};
 }
+
+test('HarmonyOS restores user imports with demo titles and filters only reserved built-in IDs',async()=>{
+  const fixture=await libraryFixture();
+  const demos=['demo','demo-moon','demo-forest'].map((id,i)=>({id,title:['潮汐之间','月色落在水面','林间的呼吸'][i]}));
+  const imports=demos.map((song,i)=>({...song,id:'user-'+i,sourceUri:'file://docs/'+song.title+'.wav'}));
+  fixture.storage.set('/private/music.json',JSON.stringify([...demos,...imports]));
+  assert.deepEqual(Array.from(fixture.create().songs,song=>song.id),imports.map(song=>song.id));
+  fixture.storage.set('/private/music.json',JSON.stringify(demos));
+  assert.equal(fixture.create().songs.length,0);
+});
 
 for(const rescan of [false,true])test(`HarmonyOS real folder traversal combines format/folder/album rules (rescan=${rescan})`,async()=>{
   const f=await libraryFixture();
@@ -136,6 +155,13 @@ test('HarmonyOS incremental scans enumerate unchanged files without reads, copie
   assert.equal(library.scanRead,1);assert.deepEqual(f.copied,[old.sourceUri]);assert.equal(changed.title,'Changed title');assert.equal(changed.hidden,true);assert.equal(changed.playCount,9);
   assert.equal(f.storage.get('/private/'+id),'copy:'+old.sourceUri+':101');
   console.log('EVIDENCE HarmonyOS modified:',JSON.stringify({enumerated:library.scanFound,audioRead:library.scanRead,copies:f.copied.length,stableId:changed.id===id}));
+  const image=f.root+'/exact.jpg';
+  f.entries.get(f.root).push('exact.jpg');f.copied.length=0;library=await run();
+  const firstCover=library.songs.find(s=>s.id===id).coverFile;
+  assert.ok(firstCover);assert.equal(library.scanRead,0);assert.deepEqual(f.copied,[image]);
+  f.copied.length=0;library=await run();assert.equal(library.songs.find(s=>s.id===id).coverFile,firstCover);assert.deepEqual(f.copied,[]);
+  f.versions.set(image,{mtime:102});library=await run();
+  assert.notEqual(library.songs.find(s=>s.id===id).coverFile,firstCover);assert.deepEqual(f.copied,[image]);
   f.entries.get(f.root).push('exact.lrc');f.copied.length=0;library=await run();
   assert.equal(library.scanRead,0);assert.deepEqual(f.copied,[f.root+'/exact.lrc']);assert.equal(library.songs.find(s=>s.id===id).hasLyrics,true);
   f.copied.length=0;library=await run();assert.equal(library.scanRead,0);assert.equal(f.copied.length,0);
@@ -144,12 +170,12 @@ test('HarmonyOS incremental scans enumerate unchanged files without reads, copie
   f.statFailures.clear();f.entries.set(f.root,f.entries.get(f.root).filter(n=>n!=='exact.lrc'));f.copied.length=0;
   library=await run();assert.equal(library.scanRead,0);assert.equal(library.songs.find(s=>s.id===id).hasLyrics,false);assert.equal(f.copied.length,0);
   const legacy=library.songs.find(s=>s.id===id);legacy.factsVersion=0;library.saveSongs();f.copied.length=0;
-  library=await run();assert.equal(library.scanRead,1);assert.equal(library.songs.find(s=>s.id===id).factsVersion,1,'statistics upgrade bypasses unchanged shortcut');
+  library=await run();assert.equal(library.scanRead,1);assert.equal(library.songs.find(s=>s.id===id).factsVersion,3,'statistics upgrade bypasses unchanged shortcut');
   const count=library.songs.length;f.entries.set(f.root+'/Album',f.entries.get(f.root+'/Album').filter(n=>n!=='new.flac'));
-  library=await run();assert.equal(library.songs.length,count);assert.equal(library.scanRead,0,'removed source retains imported copy and library entry');
+  library=await run();assert.equal(library.songs.length,count-1);assert(!library.songs.some(s=>s.sourceUri?.endsWith('/new.flac')));assert.equal(library.scanRead,0,'confirmed missing source is removed without rereading other audio');
   f.versions.set(old.sourceUri,{mtime:0});library=await run();assert.equal(library.scanRead,1,'unknown timestamp must fall back to re-reading');
   f.versions.set(old.sourceUri,{mtime:101});await library.pick(true,false,[f.blocked],['mp3'],true);
-  assert.equal(library.songs.length,count+3,'new filter reconsiders short-file cache');
+  assert.equal(library.songs.length,count-1+3,'new filter reconsiders short-file cache');
 });
 
 test('Shared UI presets match both native extension allowlists and both bridges carry all rules',async()=>{
@@ -164,11 +190,13 @@ test('Shared UI presets match both native extension allowlists and both bridges 
   }
   assert.match(android,/skipShort=options.optBoolean\("skipShort",true\)/);
   assert.match(android,/formatList=options.optJSONArray\("blockedFormats"\)/);
-  assert.match(android,/scanFilter.blocksName\(name\)\)\{excludedFormats\+\+;continue;\}/);
-  assert.match(harmony,/this.readFile\(item.uri,item.folder,!prior&&folderMode&&skipShort,prior\)/);
+  assert.match(android,/scanFilter.blocksName\(name\)\)\{(?:run\.)?excludedFormats\+\+;continue;\}/);
+  assert.match(harmony,/this.readFile\(item.uri,item.folder,!prior&&folderMode&&skipShort,run,created,replacements,prior\)/);
   const bridge=await read('mobile/harmony/entry/src/main/ets/pages/Index.ets');
   assert.match(bridge,/this.local.pick\(folderMode,skipShort,blocked,blockedFormats,rescan\)/);
   assert.match(bridge,/case 'rescan':this.importSongs\(true,a.skipShort\?\?true,a.blocked\?\?\[\],a.blockedFormats\?\?\[\],true\)/);
-  for(const name of ['scan-rules.js','scan-rules.css'])assert.equal(await read('mobile/harmony/entry/src/main/resources/rawfile/player/'+name),await read('mobile/player-assets/player/'+name));
+  const staged='mobile/harmony/entry/src/main/resources/rawfile/player/';
+  assert.equal(await read(staged+'scan-rules.js'),await read('mobile/player-assets/player/scan-rules.js'));
+  assert((await read(staged+'home-bundle.css')).includes(await read('mobile/player-assets/player/scan-rules.css')));
   for(const base of ['mobile/player-assets/player/','mobile/harmony/entry/src/main/resources/rawfile/player/'])for(const command of ['scan','rescan'])assert((await read(base+'sidebar.js')).includes(`command('${command}',{skipShort,blocked,blockedFormats});`));
 });

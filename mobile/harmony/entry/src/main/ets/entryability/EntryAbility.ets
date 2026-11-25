@@ -1,16 +1,46 @@
+import { systemPlayback } from '../engine/SystemPlayback';
+import { rpc } from '@kit.IPCKit';
 import { AbilityConstant, ConfigurationConstant, UIAbility, Want } from '@kit.AbilityKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { window } from '@kit.ArkUI';
 
 const DOMAIN = 0x0000;
 
+interface CardCommand {control?:string;favoriteKey?:string}
+interface CardRoute {targetPage?:string}
+class ControlReply implements rpc.Parcelable {
+  marshalling(parcel:rpc.MessageSequence):boolean{parcel.writeInt(1);return true;}
+  unmarshalling(parcel:rpc.MessageSequence):boolean{parcel.readInt();return true;}
+}
+
 export default class EntryAbility extends UIAbility {
+  private acceptRoute(want:Want):void {
+    const params=want.parameters?.params;
+    let player=false;
+    if(typeof params==='string'){
+      try{player=(JSON.parse(params) as CardRoute)?.targetPage==='nowPlaying';}catch{}
+    }
+    AppStorage.setOrCreate('widgetPlayerPending',player);
+  }
+  onNewWant(want:Want, launchParam:AbilityConstant.LaunchParam):void {
+    this.acceptRoute(want);
+  }
   onCreate(want: Want, launchParam: AbilityConstant.LaunchParam): void {
+    this.acceptRoute(want);
+    systemPlayback.attach(this.context);
+    this.callee.on('playerControl',(parcel:rpc.MessageSequence)=>{
+      const data=JSON.parse(parcel.readString()) as CardCommand;
+      if(data.control==='favorite')systemPlayback.toggleCardFavorite(data.favoriteKey??'');
+      else systemPlayback.command(data.control??'');
+      return new ControlReply();
+    });
     this.context.getApplicationContext().setColorMode(ConfigurationConstant.ColorMode.COLOR_MODE_NOT_SET);
     hilog.info(DOMAIN, 'testTag', '%{public}s', 'Ability onCreate');
   }
 
-  onDestroy(): void {
+  async onDestroy(): Promise<void> {
+    this.callee.off('playerControl');
+    await systemPlayback.close();
     hilog.info(DOMAIN, 'testTag', '%{public}s', 'Ability onDestroy');
   }
 
@@ -21,6 +51,7 @@ export default class EntryAbility extends UIAbility {
     // Establish the edge-to-edge surface before the first page is drawn.
     // The page, rather than the window, keeps controls clear of system areas.
     const main = windowStage.getMainWindowSync();
+    try { main.setWindowBackgroundColor('#10121E'); } catch {}
     main.setWindowLayoutFullScreen(true)
       .then(() => main.setWindowSystemBarEnable(['status', 'navigation']))
       .then(() => main.setWindowSystemBarProperties({

@@ -26,7 +26,9 @@ try{
   await page.goto(`http://127.0.0.1:${server.address().port}/player/index.html`);
   await page.waitForFunction(()=>typeof lumeUpdate==='function');
   await page.evaluate(platform=>{lumeUpdate({platform,songs:[{id:'surface-test',title:'Theme surface',artist:'LUME',hasSideLyrics:true}],id:'surface-test',title:'Theme surface',duration:120,pos:2,playing:false});lumeInsets({top:28,right:0,bottom:24,left:0});},platform);
-  await page.locator('.hero').click();
+  const miniTrack=page.locator('.mini-track');
+  if(await page.locator('#phone-dock').getAttribute('data-open')==='nav')await miniTrack.click();
+  await miniTrack.click();
   await page.locator('#album').click();
   await page.waitForFunction(()=>document.querySelector('#full').classList.contains('lyrics-screen')&&!document.getElementById('translation-choice').hidden);
   for(const theme of ['dark','light','custom']){

@@ -1,0 +1,11 @@
+/* The dock uses its acrylic fill without an outer keyline. */
+html body #phone-dock :is(.dock-navigation,#mini,#mini-art),
+html[data-phone-theme=dark] body #phone-dock[data-open=nav] :is(#mini,#mini-art) {
+  border: 0;
+}
+
+html body #phone-dock :is(.dock-navigation,#mini),
+html[data-phone-theme=dark] body #phone-dock[data-open=nav] #mini {
+  box-shadow: none;
+}
+

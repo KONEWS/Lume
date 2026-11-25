@@ -3,6 +3,26 @@ import assert from 'node:assert/strict';
 import {once} from 'node:events';
 import {WebSocket} from 'ws';
 import {JoinedRoom} from '../server/joined-room.mjs';
+
+test('unplayed catalog covers remain distinct and late images cannot cross a catalog change',async()=>{
+  const room=new JoinedRoom(),revision='c'.repeat(32);
+  room.controller=new AbortController();room.connection={status:'joined'};
+  room.packet={receivedAt:Date.now(),trackId:'',outputs:[]};
+  room.catalog=['first','second'].map(id=>({id,title:id,coverRevision:revision}));
+  const tracks=room.snapshot().tracks;
+  assert.notEqual(tracks[0].artwork,tracks[1].artwork);
+  assert.ok(tracks.every(t=>t.artwork==='/api/room/thumbnail/0/'+revision+'/'+t.id));
+  let finish;
+  room.json=()=>new Promise(resolve=>{finish=resolve;});
+  const late=room.thumbnail(0,revision,'second');
+  room.catalog=[{id:'second',title:'Updated',coverRevision:'d'.repeat(32)}];
+  finish({cover:'data:image/png;base64,AQID'});
+  await assert.rejects(late);
+  await assert.rejects(room.thumbnail(0,revision,'first'));
+  await assert.rejects(room.thumbnail(1,room.catalog[0].coverRevision,'second'));
+  room.json=async()=>({cover:''});
+  assert.equal(await room.thumbnail(0,room.catalog[0].coverRevision,'second'),null);
+});
 import {sleep,until,phoneFixture,playerFixture,joined} from './helpers/joined-room-fixtures.mjs';
 
 test('late cover and lyrics cannot cross a song change or a room change',async()=>{

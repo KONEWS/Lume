@@ -1,0 +1,49 @@
+/* Shared by the desktop renderer and both native WebViews. A room skin
+   supplies these same four colours when the listener selects one. */
+.listening-surface,
+.listen-page #library-frame {
+  --listen-paper: var(--skin-background, #eae5e2);
+  --listen-surface: var(--skin-surface, #faf6f2);
+  --listen-ink: var(--skin-ink, #302624);
+  --listen-action: var(--skin-accent, #a64438);
+  --listen-secondary: color-mix(in srgb, var(--listen-ink) 70%, var(--listen-paper));
+  --listen-rule: color-mix(in srgb, var(--listen-ink) 17%, transparent);
+  --listen-hover: color-mix(in srgb, var(--listen-action) 9%, var(--listen-surface));
+  --sleeve-radius: 8px;
+  color: var(--listen-ink);
+}
+.app-shell:not(.daylight) .listening-surface,
+[data-phone-theme=dark] .listening-surface,
+[data-phone-theme=dark] .listen-page #library-frame {
+  --listen-paper: var(--skin-background, #10121e);
+  --listen-surface: var(--skin-surface, #1d2233);
+  --listen-ink: var(--skin-ink, #f2f4fc);
+  --listen-action: var(--skin-accent, #70caff);
+}
+:root[data-phone-theme] :is(.listening-surface,.listen-page #library-frame) {
+  --listen-paper:var(--studio-bg);
+  --listen-surface:var(--studio-surface);
+  --listen-ink:var(--studio-ink);
+  --listen-action:var(--studio-accent);
+}
+.listening-surface .track-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  line-height: 1.4;
+  font-weight: 650;
+  letter-spacing: .06em;
+  color: var(--listen-secondary);
+}
+.listening-surface .track-status::before {
+  content: '';
+  width: 18px;
+  height: 2px;
+  background: var(--listen-action);
+}
+.listening-surface :is(button, input):focus-visible {
+  outline: 2px solid var(--listen-action);
+  outline-offset: 2px;
+}
+.listening-surface button:disabled { opacity: .45 }

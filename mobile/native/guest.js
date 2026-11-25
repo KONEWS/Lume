@@ -1,5 +1,6 @@
 const $=id=>document.getElementById(id);
 const audio=new Audio();
+let appliedTrim=null;
 let joined=false, generation=0, latest, version=-1, sound=false, media='', requests='';
 async function post(path,body){
   const r=await fetch('/api/'+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),signal:AbortSignal.timeout(5000)});
@@ -13,11 +14,14 @@ function sync(){
   const s=latest;
   if(!joined||!s||!sound||!s.playing||!s.media){audio.pause();return;}
   const path=s.media.replace('/api/receiver-media/','/api/listen/');
-  if(path!==media){media=path;audio.src=path;}
+  if(path!==media){appliedTrim=null;media=path;audio.src=path;}
   audio.volume=Math.max(0,Math.min(1,s.volume));
   const target=s.position+(performance.now()-s.sampledAt-s.delayMs)/1000;
   if(target<0){audio.pause();return;}
-  if(audio.readyState && Math.abs(audio.currentTime-target)>0.16)audio.currentTime=Math.min(target,s.duration);
+  if(audio.readyState){
+    if(appliedTrim!==s.delayMs||Math.abs(audio.currentTime-target)>0.16)audio.currentTime=Math.min(target,s.duration);
+    appliedTrim=s.delayMs;
+  }
   if(audio.paused && !audio.ended)audio.play().catch(e=>{if(e.name!=='AbortError'){sound=false;$('sound').hidden=false;note('请点击启用此设备声音');}});
 }
 audio.onloadedmetadata=sync;
